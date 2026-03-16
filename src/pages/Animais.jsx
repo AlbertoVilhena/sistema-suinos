@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { FaPlus, FaEdit, FaTrash, FaSearch } from 'react-icons/fa';
 
 export default function Animais() {
-  const [animais, setAnimais] = useState([
+  const [animais] = useState([
     { id: 1, identificacao: 'BR-2026-001', sexo: 'Fêmea', status: 'Ativo', peso: '150kg' },
     { id: 2, identificacao: 'BR-2026-002', sexo: 'Macho', status: 'Ativo', peso: '180kg' },
   ]);

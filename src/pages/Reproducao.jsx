@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { FaPlus, FaHeartbeat } from 'react-icons/fa';
 
 export default function Reproducao() {
-  const [eventos, setEventos] = useState([
+  const [eventos] = useState([
     { id: 1, matriz: 'BR-2026-001', tipo: 'Cobertura', data: '2026-03-10', status: 'Gestante' },
     { id: 2, matriz: 'BR-2026-003', tipo: 'Parto', data: '2026-02-15', nascidos: 12 },
   ]);

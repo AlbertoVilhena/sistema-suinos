@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { FaHeartbeat, FaLeaf, FaDollarSign } from 'react-icons/fa';
 
 export default function Dashboard() {
-  const [stats, setStats] = useState([
+  const [stats] = useState([
     { icon: FaHeartbeat, label: 'Total de Animais', value: '1.250', color: 'bg-blue-500' },
     { icon: FaHeartbeat, label: 'Matrizes Ativas', value: '245', color: 'bg-red-500' },
     { icon: FaLeaf, label: 'Consumo de Ração', value: '2.450 kg', color: 'bg-green-500' },
     { icon: FaDollarSign, label: 'Custo Total', value: 'R$ 12.500', color: 'bg-yellow-500' },
   ]);
 
-  const [recentEvents, setRecentEvents] = useState([
+  const [recentEvents] = useState([
     { id: 1, type: 'Parto', animal: 'MT-034', date: '2026-03-16', status: 'success' },
     { id: 2, type: 'Vacinação', animal: 'BR-2026-001', date: '2026-03-15', status: 'success' },
     { id: 3, type: 'Pesagem', animal: 'LR-045', date: '2026-03-14', status: 'pending' },

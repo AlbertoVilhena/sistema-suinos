@@ -10,11 +10,6 @@ import Nutricao from './pages/Nutricao';
 import Financeiro from './pages/Financeiro';
 import Configuracoes from './pages/Configuracoes';
 
-function ProtectedRoute({ children }) {
-  const token = localStorage.getItem('token');
-  return token ? children : <Navigate to="/login" />;
-}
-
 function App() {
   const token = localStorage.getItem('token');
 
