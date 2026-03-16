@@ -1,9 +1,0 @@
-{
-  "name": "sistema-gestao-suinos",
-  "version": "1.0.0",
-  "description": "Sistema de Gestão de Suínos",
-  "private": true,
-  "scripts": {
-    "build": "bash build.sh"
-  }
-}
