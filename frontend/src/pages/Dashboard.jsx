@@ -1,9 +1,9 @@
 import React from 'react';
-import { FaPig, FaHeartbeat, FaLeaf, FaDollarSign } from 'react-icons/fa';
+import { FaHog, FaHeartbeat, FaLeaf, FaDollarSign } from 'react-icons/fa';
 
 export default function Dashboard() {
   const stats = [
-    { icon: FaPig, label: 'Total de Animais', value: '1.250', color: 'bg-blue-500' },
+    { icon: FaHog, label: 'Total de Animais', value: '1.250', color: 'bg-blue-500' },
     { icon: FaHeartbeat, label: 'Matrizes Ativas', value: '85', color: 'bg-green-500' },
     { icon: FaLeaf, label: 'Rações em Estoque', value: '45 ton', color: 'bg-yellow-500' },
     { icon: FaDollarSign, label: 'Faturamento Mês', value: 'R$ 125.000', color: 'bg-purple-500' },
