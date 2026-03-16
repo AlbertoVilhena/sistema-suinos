@@ -1,11 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { FaHome, FaPig, FaHeartbeat, FaLeaf, FaDollarSign, FaCog } from 'react-icons/fa';
+import { FaHome, FaHog, FaHeartbeat, FaLeaf, FaDollarSign, FaCog } from 'react-icons/fa';
 
 export default function Sidebar() {
   const menuItems = [
     { icon: FaHome, label: 'Dashboard', path: '/' },
-    { icon: FaPig, label: 'Animais', path: '/animais' },
+    { icon: FaHog, label: 'Animais', path: '/animais' },
     { icon: FaHeartbeat, label: 'Reprodução', path: '/reproducao' },
     { icon: FaLeaf, label: 'Nutrição', path: '/nutricao' },
     { icon: FaDollarSign, label: 'Financeiro', path: '/financeiro' },
