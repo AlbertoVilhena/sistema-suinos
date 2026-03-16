@@ -1,8 +1,4 @@
 {
-  "buildCommand": "cd frontend && npm install && npm run build",
-  "outputDirectory": "frontend/build",
-  "installCommand": "npm install && cd frontend && npm install",
-  "env": {
-    "REACT_APP_API_URL": "@react_app_api_url"
-  }
+  "buildCommand": "bash build.sh",
+  "outputDirectory": "frontend/build"
 }
