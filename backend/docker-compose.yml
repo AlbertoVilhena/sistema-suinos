@@ -1,0 +1,38 @@
+# docker-compose.yml
+#
+# Use este arquivo para iniciar um container Docker com o banco de dados MySQL
+# pronto para uso com a aplicação FastAPI.
+#
+# Pré-requisitos: Docker e Docker Compose instalados.
+#
+# Comandos:
+#   - Iniciar o banco de dados em background: docker-compose up -d
+#   - Parar o banco de dados: docker-compose down
+#   - Ver logs: docker-compose logs -f
+
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: gestao_suinos_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: gestao_suinos
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: root_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Para usar um script de inicialização customizado (opcional)
+      # - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 10s
+      retries: 5
+
+volumes:
+  mysql_data:
+    driver: local
