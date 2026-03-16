@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { FaHog, FaHeartbeat, FaLeaf, FaDollarSign } from 'react-icons/fa';
+import { FaHeartbeat, FaLeaf, FaDollarSign } from 'react-icons/fa';
 
 export default function Dashboard() {
   const [stats, setStats] = useState([
-    { icon: FaHog, label: 'Total de Animais', value: '1.250', color: 'bg-blue-500' },
+    { icon: FaHeartbeat, label: 'Total de Animais', value: '1.250', color: 'bg-blue-500' },
     { icon: FaHeartbeat, label: 'Matrizes Ativas', value: '245', color: 'bg-red-500' },
     { icon: FaLeaf, label: 'Consumo de Ração', value: '2.450 kg', color: 'bg-green-500' },
     { icon: FaDollarSign, label: 'Custo Total', value: 'R$ 12.500', color: 'bg-yellow-500' },

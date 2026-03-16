@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaHog } from 'react-icons/fa';
+import { FaHome } from 'react-icons/fa';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -34,7 +34,7 @@ export default function Login() {
       <div className="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <FaHog className="text-6xl text-green-600 mx-auto mb-4" />
+          <FaHome className="text-6xl text-green-600 mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-gray-800">Suínos</h1>
           <p className="text-gray-600 mt-2">Sistema de Gestão de Granja</p>
         </div>

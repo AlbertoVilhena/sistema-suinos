@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaHome, FaHog, FaHeartbeat, FaLeaf, FaDollarSign, FaCog, FaBars, FaTimes } from 'react-icons/fa';
+import { FaHome, FaHeartbeat, FaLeaf, FaDollarSign, FaCog, FaBars, FaTimes } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
 
 export default function Sidebar() {
@@ -7,7 +7,7 @@ export default function Sidebar() {
 
   const menuItems = [
     { icon: FaHome, label: 'Dashboard', path: '/' },
-    { icon: FaHog, label: 'Animais', path: '/animais' },
+    { icon: FaHome, label: 'Animais', path: '/animais' },
     { icon: FaHeartbeat, label: 'Reprodução', path: '/reproducao' },
     { icon: FaLeaf, label: 'Nutrição', path: '/nutricao' },
     { icon: FaDollarSign, label: 'Financeiro', path: '/financeiro' },
