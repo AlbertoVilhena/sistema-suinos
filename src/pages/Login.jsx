@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaHome } from 'react-icons/fa';
+import { authAPI } from '../api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -15,15 +16,16 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // Simulação de login - em produção, conectar com a API
-      if (email === 'admin@granja.com' && password === 'admin123') {
-        localStorage.setItem('token', 'fake-jwt-token');
+      const response = await authAPI.login(email, password);
+      
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
         navigate('/');
-      } else {
-        setError('Email ou senha incorretos');
       }
     } catch (err) {
-      setError('Erro ao fazer login');
+      const errorMessage = err.response?.data?.error || 'Erro ao fazer login';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
