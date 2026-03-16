@@ -1,0 +1,9 @@
+{
+  "name": "sistema-gestao-suinos",
+  "version": "1.0.0",
+  "description": "Sistema de Gestão de Suínos",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build"
+  }
+}
