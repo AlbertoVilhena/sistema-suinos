@@ -27,7 +27,7 @@ export default function Login() {
     <div className="min-h-screen bg-gradient-to-br from-green-600 to-green-800 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <FaPig className="text-6xl text-green-600 mx-auto mb-4" />
+          <FaHog className="text-6xl text-green-600 mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-gray-800">Sistema de Gestão</h1>
           <p className="text-gray-600">Gerenciamento de Suínos</p>
         </div>
