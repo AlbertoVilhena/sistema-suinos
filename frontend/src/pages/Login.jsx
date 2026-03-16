@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaPig } from 'react-icons/fa';
+import { FaHog } from 'react-icons/fa';
 
 export default function Login() {
   const [email, setEmail] = useState('');
