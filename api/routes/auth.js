@@ -33,7 +33,7 @@ router.post('/login', async (req, res) => {
 
     const connection = await pool.getConnection();
     const [users] = await connection.query(
-      'SELECT * FROM usuarios WHERE email = ?',
+      'SELECT * FROM users WHERE email = ?',
       [email]
     );
     connection.release();
@@ -43,7 +43,7 @@ router.post('/login', async (req, res) => {
     }
 
     const user = users[0];
-    const passwordMatch = await bcrypt.compare(password, user.senha);
+    const passwordMatch = await bcrypt.compare(password, user.password);
 
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Email ou senha inválidos' });
