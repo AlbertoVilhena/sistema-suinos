@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://suinocultura-backend.onrender.com'
+const API_URL = import.meta.env.VITE_API_URL || 'https://sistema-suinos.onrender.com'
 
 const api = axios.create({
   baseURL: API_URL,
