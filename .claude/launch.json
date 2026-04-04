@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Frontend (Vite/React)",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd frontend && npm install --silent && npm run dev"],
+      "port": 5173
+    },
+    {
+      "name": "Backend (Flask API)",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd backend && pip install -r requirements.txt -q && python app.py"],
+      "port": 5001,
+      "autoPort": true
+    }
+  ]
+}

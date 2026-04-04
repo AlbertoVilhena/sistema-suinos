@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: suinocultura-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: FLASK_DEBUG
+        value: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: suinocultura-db
+          property: connectionString
+
+databases:
+  - name: suinocultura-db
+    plan: free
