@@ -1,6 +1,8 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://sistema-suinos.onrender.com'
+const RENDER_URL = 'https://sistema-suinos.onrender.com'
+const envUrl = import.meta.env.VITE_API_URL
+const API_URL = (envUrl && !envUrl.includes('railway')) ? envUrl : RENDER_URL
 
 const api = axios.create({
   baseURL: API_URL,
