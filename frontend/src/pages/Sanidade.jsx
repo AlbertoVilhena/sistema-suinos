@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext'
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 
 const emptyForm = {
-  lote_id: '', animal_id: '', vacina: '', data: '', dose: '', responsavel: '', observacoes: ''
+  lote_id: '', animal_id: '', vacina: '', data: '', dose: '', responsavel: '', custo: '', observacoes: ''
 }
 
 export default function Sanidade() {
@@ -158,6 +158,11 @@ export default function Sanidade() {
               <label>Responsável</label>
               <input value={form.responsavel} onChange={e => set('responsavel', e.target.value)}
                 placeholder="Nome do responsável" />
+            </div>
+            <div className="form-group">
+              <label>Custo (R$)</label>
+              <input type="number" min="0" step="0.01" value={form.custo}
+                onChange={e => set('custo', e.target.value)} placeholder="0,00" />
             </div>
             <div className="form-group span-2">
               <label>Observações</label>

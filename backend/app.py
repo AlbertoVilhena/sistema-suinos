@@ -29,7 +29,7 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=8)
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=False)
 
 # ============== MODELS ==============
 
@@ -100,6 +100,8 @@ class Animal(db.Model):
     peso_entrada = db.Column(db.Float)
     peso_atual = db.Column(db.Float)
     status = db.Column(db.String(20), default='ativo')  # ativo, morto, vendido, transferido
+    origem = db.Column(db.String(20), default='comprado')  # nascido, comprado
+    custo_aquisicao = db.Column(db.Float, default=0)
     observacoes = db.Column(db.Text)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -116,6 +118,8 @@ class Animal(db.Model):
             'peso_entrada': self.peso_entrada,
             'peso_atual': self.peso_atual,
             'status': self.status,
+            'origem': self.origem,
+            'custo_aquisicao': self.custo_aquisicao or 0,
             'observacoes': self.observacoes,
             'criado_em': self.criado_em.isoformat()
         }
@@ -130,6 +134,7 @@ class Vacinacao(db.Model):
     data = db.Column(db.Date, nullable=False)
     dose = db.Column(db.String(50))
     responsavel = db.Column(db.String(100))
+    custo = db.Column(db.Float, default=0)
     observacoes = db.Column(db.Text)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -144,6 +149,7 @@ class Vacinacao(db.Model):
             'data': self.data.isoformat() if self.data else None,
             'dose': self.dose,
             'responsavel': self.responsavel,
+            'custo': self.custo or 0,
             'observacoes': self.observacoes,
             'criado_em': self.criado_em.isoformat()
         }
@@ -187,6 +193,7 @@ class Alimentacao(db.Model):
     __tablename__ = 'alimentacoes'
     id = db.Column(db.Integer, primary_key=True)
     lote_id = db.Column(db.Integer, db.ForeignKey('lotes.id'), nullable=False)
+    formulacao_id = db.Column(db.Integer, db.ForeignKey('formulacoes.id'), nullable=True)
     data = db.Column(db.Date, nullable=False)
     racao_tipo = db.Column(db.String(100))
     quantidade_kg = db.Column(db.Float, nullable=False)
@@ -199,6 +206,7 @@ class Alimentacao(db.Model):
         custo_total = (self.quantidade_kg * self.custo_unitario) if self.custo_unitario else 0
         return {
             'id': self.id,
+            'formulacao_id': self.formulacao_id,
             'lote_id': self.lote_id,
             'lote_numero': lote.numero if lote else None,
             'data': self.data.isoformat() if self.data else None,
@@ -236,6 +244,79 @@ class Financeiro(db.Model):
             'lote_numero': lote.numero if lote else None,
             'usuario_id': self.usuario_id,
             'criado_em': self.criado_em.isoformat()
+        }
+
+
+class Ingrediente(db.Model):
+    __tablename__ = 'ingredientes'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False)
+    unidade = db.Column(db.String(20), default='kg')
+    estoque_kg = db.Column(db.Float, default=0)
+    custo_por_kg = db.Column(db.Float, default=0)
+    ativo = db.Column(db.Boolean, default=True)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nome': self.nome,
+            'unidade': self.unidade,
+            'estoque_kg': self.estoque_kg or 0,
+            'custo_por_kg': self.custo_por_kg or 0,
+            'ativo': self.ativo,
+            'criado_em': self.criado_em.isoformat()
+        }
+
+
+class Formulacao(db.Model):
+    __tablename__ = 'formulacoes'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False)
+    descricao = db.Column(db.Text)
+    fase = db.Column(db.String(30))
+    ativa = db.Column(db.Boolean, default=True)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    itens = db.relationship('FormulacaoItem', backref='formulacao', lazy=True, cascade='all, delete-orphan')
+
+    def calcular_custo_por_kg(self):
+        return round(sum((i.percentagem / 100) * (i.custo_unitario or 0) for i in self.itens), 4)
+
+    def to_dict(self):
+        itens = [i.to_dict() for i in self.itens]
+        return {
+            'id': self.id,
+            'nome': self.nome,
+            'descricao': self.descricao,
+            'fase': self.fase,
+            'ativa': self.ativa,
+            'custo_por_kg': self.calcular_custo_por_kg(),
+            'total_percentagem': round(sum(i.percentagem for i in self.itens), 2),
+            'itens': itens,
+            'criado_em': self.criado_em.isoformat()
+        }
+
+
+class FormulacaoItem(db.Model):
+    __tablename__ = 'formulacao_itens'
+    id = db.Column(db.Integer, primary_key=True)
+    formulacao_id = db.Column(db.Integer, db.ForeignKey('formulacoes.id'), nullable=False)
+    ingrediente_id = db.Column(db.Integer, db.ForeignKey('ingredientes.id'), nullable=False)
+    percentagem = db.Column(db.Float, nullable=False)
+    custo_unitario = db.Column(db.Float, default=0)  # snapshot do custo na criação
+
+    def to_dict(self):
+        ing = Ingrediente.query.get(self.ingrediente_id)
+        return {
+            'id': self.id,
+            'formulacao_id': self.formulacao_id,
+            'ingrediente_id': self.ingrediente_id,
+            'ingrediente_nome': ing.nome if ing else None,
+            'ingrediente_unidade': ing.unidade if ing else 'kg',
+            'estoque_disponivel': ing.estoque_kg if ing else 0,
+            'percentagem': self.percentagem,
+            'custo_unitario': self.custo_unitario or 0,
+            'custo_proporcional': round((self.percentagem / 100) * (self.custo_unitario or 0), 4)
         }
 
 
@@ -481,14 +562,16 @@ def create_animal():
 
     data = request.get_json()
     animal = Animal(
-        lote_id=data.get('lote_id'),
+        lote_id=to_int(data.get('lote_id')),
         brinco=data.get('brinco'),
         sexo=data.get('sexo'),
         raca=data.get('raca'),
         data_nascimento=datetime.strptime(data['data_nascimento'], '%Y-%m-%d').date() if data.get('data_nascimento') else None,
-        peso_entrada=data.get('peso_entrada'),
-        peso_atual=data.get('peso_atual') or data.get('peso_entrada'),
+        peso_entrada=to_float(data.get('peso_entrada')),
+        peso_atual=to_float(data.get('peso_atual')) or to_float(data.get('peso_entrada')),
         status=data.get('status', 'ativo'),
+        origem=data.get('origem', 'comprado'),
+        custo_aquisicao=to_float(data.get('custo_aquisicao'), 0),
         observacoes=data.get('observacoes')
     )
     db.session.add(animal)
@@ -506,7 +589,7 @@ def update_animal(aid):
     animal = Animal.query.get_or_404(aid)
     data = request.get_json()
 
-    for f in ['brinco', 'sexo', 'raca', 'peso_entrada', 'peso_atual', 'status', 'observacoes', 'lote_id']:
+    for f in ['brinco', 'sexo', 'raca', 'peso_entrada', 'peso_atual', 'status', 'origem', 'custo_aquisicao', 'observacoes', 'lote_id']:
         if f in data:
             setattr(animal, f, data[f])
     if data.get('data_nascimento'):
@@ -554,11 +637,12 @@ def create_vacinacao():
 
     vac = Vacinacao(
         lote_id=data['lote_id'],
-        animal_id=data.get('animal_id'),
+        animal_id=to_int(data.get('animal_id')),
         vacina=data['vacina'],
         data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
         dose=data.get('dose'),
         responsavel=data.get('responsavel'),
+        custo=to_float(data.get('custo'), 0),
         observacoes=data.get('observacoes')
     )
     db.session.add(vac)
@@ -576,7 +660,7 @@ def update_vacinacao(vid):
     vac = Vacinacao.query.get_or_404(vid)
     data = request.get_json()
 
-    for f in ['vacina', 'dose', 'responsavel', 'observacoes', 'lote_id', 'animal_id']:
+    for f in ['vacina', 'dose', 'responsavel', 'custo', 'observacoes', 'lote_id', 'animal_id']:
         if f in data:
             setattr(vac, f, data[f])
     if 'data' in data:
@@ -694,12 +778,21 @@ def create_alimentacao():
     if not data.get('lote_id') or not data.get('data') or not data.get('quantidade_kg'):
         return jsonify({'error': 'Lote, data e quantidade são obrigatórios'}), 400
 
+    formulacao_id = to_int(data.get('formulacao_id'))
+    custo_unitario = to_float(data.get('custo_unitario'))
+    # Se selecionou uma formulação e não informou custo, usa o custo calculado da fórmula
+    if formulacao_id and custo_unitario is None:
+        f = Formulacao.query.get(formulacao_id)
+        if f:
+            custo_unitario = f.calcular_custo_por_kg()
+
     alim = Alimentacao(
         lote_id=data['lote_id'],
+        formulacao_id=formulacao_id,
         data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
         racao_tipo=data.get('racao_tipo'),
         quantidade_kg=to_float(data.get('quantidade_kg')),
-        custo_unitario=to_float(data.get('custo_unitario')),
+        custo_unitario=custo_unitario,
         observacoes=data.get('observacoes')
     )
     db.session.add(alim)
@@ -813,6 +906,145 @@ def delete_financeiro(fid):
     return jsonify({'message': 'Registro excluído com sucesso'})
 
 
+# ============== INGREDIENTES ROUTES ==============
+
+@app.route('/api/ingredientes', methods=['GET'])
+@jwt_required()
+def get_ingredientes():
+    return jsonify([i.to_dict() for i in Ingrediente.query.order_by(Ingrediente.nome).all()])
+
+
+@app.route('/api/ingredientes', methods=['POST'])
+@jwt_required()
+def create_ingrediente():
+    u = get_current_user()
+    if not can_edit(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    data = request.get_json()
+    if not data.get('nome'):
+        return jsonify({'error': 'Nome é obrigatório'}), 400
+    ing = Ingrediente(
+        nome=data['nome'],
+        unidade=data.get('unidade', 'kg'),
+        estoque_kg=to_float(data.get('estoque_kg'), 0),
+        custo_por_kg=to_float(data.get('custo_por_kg'), 0),
+        ativo=data.get('ativo', True)
+    )
+    db.session.add(ing)
+    db.session.commit()
+    return jsonify(ing.to_dict()), 201
+
+
+@app.route('/api/ingredientes/<int:iid>', methods=['PUT'])
+@jwt_required()
+def update_ingrediente(iid):
+    u = get_current_user()
+    if not can_edit(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    ing = Ingrediente.query.get_or_404(iid)
+    data = request.get_json()
+    for f in ['nome', 'unidade', 'estoque_kg', 'custo_por_kg', 'ativo']:
+        if f in data:
+            setattr(ing, f, data[f])
+    db.session.commit()
+    return jsonify(ing.to_dict())
+
+
+@app.route('/api/ingredientes/<int:iid>', methods=['DELETE'])
+@jwt_required()
+def delete_ingrediente(iid):
+    u = get_current_user()
+    if not is_admin(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    ing = Ingrediente.query.get_or_404(iid)
+    db.session.delete(ing)
+    db.session.commit()
+    return jsonify({'message': 'Ingrediente excluído'})
+
+
+# ============== FORMULACOES ROUTES ==============
+
+@app.route('/api/formulacoes', methods=['GET'])
+@jwt_required()
+def get_formulacoes():
+    return jsonify([f.to_dict() for f in Formulacao.query.order_by(Formulacao.nome).all()])
+
+
+@app.route('/api/formulacoes', methods=['POST'])
+@jwt_required()
+def create_formulacao():
+    u = get_current_user()
+    if not can_edit(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    data = request.get_json()
+    if not data.get('nome'):
+        return jsonify({'error': 'Nome é obrigatório'}), 400
+
+    form = Formulacao(
+        nome=data['nome'],
+        descricao=data.get('descricao'),
+        fase=data.get('fase'),
+        ativa=data.get('ativa', True)
+    )
+    db.session.add(form)
+    db.session.flush()  # get id before adding items
+
+    for item in data.get('itens', []):
+        ing = Ingrediente.query.get(item.get('ingrediente_id'))
+        fi = FormulacaoItem(
+            formulacao_id=form.id,
+            ingrediente_id=item['ingrediente_id'],
+            percentagem=to_float(item.get('percentagem'), 0),
+            custo_unitario=ing.custo_por_kg if ing else to_float(item.get('custo_unitario'), 0)
+        )
+        db.session.add(fi)
+
+    db.session.commit()
+    return jsonify(form.to_dict()), 201
+
+
+@app.route('/api/formulacoes/<int:fid>', methods=['PUT'])
+@jwt_required()
+def update_formulacao(fid):
+    u = get_current_user()
+    if not can_edit(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    form = Formulacao.query.get_or_404(fid)
+    data = request.get_json()
+
+    for f in ['nome', 'descricao', 'fase', 'ativa']:
+        if f in data:
+            setattr(form, f, data[f])
+
+    if 'itens' in data:
+        # Replaces all items
+        FormulacaoItem.query.filter_by(formulacao_id=fid).delete()
+        for item in data['itens']:
+            ing = Ingrediente.query.get(item.get('ingrediente_id'))
+            fi = FormulacaoItem(
+                formulacao_id=fid,
+                ingrediente_id=item['ingrediente_id'],
+                percentagem=to_float(item.get('percentagem'), 0),
+                custo_unitario=ing.custo_por_kg if ing else to_float(item.get('custo_unitario'), 0)
+            )
+            db.session.add(fi)
+
+    db.session.commit()
+    return jsonify(form.to_dict())
+
+
+@app.route('/api/formulacoes/<int:fid>', methods=['DELETE'])
+@jwt_required()
+def delete_formulacao(fid):
+    u = get_current_user()
+    if not can_edit(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    form = Formulacao.query.get_or_404(fid)
+    db.session.delete(form)
+    db.session.commit()
+    return jsonify({'message': 'Formulação excluída'})
+
+
 # ============== DASHBOARD ==============
 
 @app.route('/api/dashboard', methods=['GET'])
@@ -864,15 +1096,21 @@ def relatorio_lotes():
     for lote in lotes:
         mortalidade = lote.quantidade_inicial - lote.quantidade_atual
         taxa_mort = (mortalidade / lote.quantidade_inicial * 100) if lote.quantidade_inicial else 0
-        custo_alim = sum(
-            (a.quantidade_kg * (a.custo_unitario or 0))
-            for a in lote.alimentacoes
-        )
+        custo_alim = sum((a.quantidade_kg * (a.custo_unitario or 0)) for a in lote.alimentacoes)
+        custo_sanidade = sum((v.custo or 0) for v in lote.vacinacoes)
+        animais_lote = Animal.query.filter_by(lote_id=lote.id).all()
+        custo_aquisicao = sum((a.custo_aquisicao or 0) for a in animais_lote)
+        custo_total = custo_alim + custo_sanidade + custo_aquisicao
+        qtd_atual = lote.quantidade_atual or 1
         result.append({
             **lote.to_dict(),
             'mortalidade': mortalidade,
             'taxa_mortalidade': round(taxa_mort, 2),
-            'custo_total_alimentacao': custo_alim
+            'custo_total_alimentacao': round(custo_alim, 2),
+            'custo_sanidade': round(custo_sanidade, 2),
+            'custo_aquisicao_animais': round(custo_aquisicao, 2),
+            'custo_total': round(custo_total, 2),
+            'custo_por_animal': round(custo_total / qtd_atual, 2) if qtd_atual else 0,
         })
     return jsonify(result)
 
@@ -882,6 +1120,14 @@ def relatorio_lotes():
 def relatorio_financeiro():
     total_rec = db.session.query(func.sum(Financeiro.valor)).filter_by(tipo='receita').scalar() or 0
     total_desp = db.session.query(func.sum(Financeiro.valor)).filter_by(tipo='despesa').scalar() or 0
+
+    # Custos operacionais (fora do módulo financeiro)
+    custo_racao = db.session.query(
+        func.sum(Alimentacao.quantidade_kg * Alimentacao.custo_unitario)
+    ).scalar() or 0
+    custo_sanidade = db.session.query(func.sum(Vacinacao.custo)).scalar() or 0
+    custo_aquisicao = db.session.query(func.sum(Animal.custo_aquisicao)).scalar() or 0
+    total_operacional = custo_racao + custo_sanidade + custo_aquisicao
 
     rec_cat = db.session.query(
         Financeiro.categoria, func.sum(Financeiro.valor).label('total')
@@ -895,6 +1141,10 @@ def relatorio_financeiro():
         'total_receitas': total_rec,
         'total_despesas': total_desp,
         'lucro': total_rec - total_desp,
+        'custo_racao': round(custo_racao, 2),
+        'custo_sanidade': round(custo_sanidade, 2),
+        'custo_aquisicao_animais': round(custo_aquisicao, 2),
+        'total_operacional': round(total_operacional, 2),
         'receitas_por_categoria': [{'categoria': r[0] or 'Outros', 'total': float(r[1])} for r in rec_cat],
         'despesas_por_categoria': [{'categoria': d[0] or 'Outros', 'total': float(d[1])} for d in desp_cat]
     })

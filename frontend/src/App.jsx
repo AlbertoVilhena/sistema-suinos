@@ -11,6 +11,7 @@ import Reproducao from './pages/Reproducao'
 import Alimentacao from './pages/Alimentacao'
 import Financeiro from './pages/Financeiro'
 import Relatorios from './pages/Relatorios'
+import Formulacao from './pages/Formulacao'
 import Usuarios from './pages/Usuarios'
 
 function ProtectedRoute({ children, adminOnly = false }) {
@@ -36,6 +37,7 @@ function AppRoutes() {
       <Route path="/alimentacao" element={<ProtectedRoute><Alimentacao /></ProtectedRoute>} />
       <Route path="/financeiro" element={<ProtectedRoute><Financeiro /></ProtectedRoute>} />
       <Route path="/relatorios" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
+      <Route path="/formulacao" element={<ProtectedRoute><Formulacao /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute adminOnly><Usuarios /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

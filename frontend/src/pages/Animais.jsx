@@ -10,7 +10,8 @@ const sexoBadge = { macho: 'badge-blue', femea: 'badge-purple' }
 
 const emptyForm = {
   lote_id: '', brinco: '', sexo: 'macho', raca: '', data_nascimento: '',
-  peso_entrada: '', peso_atual: '', status: 'ativo', observacoes: ''
+  peso_entrada: '', peso_atual: '', status: 'ativo',
+  origem: 'comprado', custo_aquisicao: '', observacoes: ''
 }
 
 export default function Animais() {
@@ -192,6 +193,21 @@ export default function Animais() {
                 <option value="vendido">Vendido</option>
                 <option value="transferido">Transferido</option>
               </select>
+            </div>
+            <div className="form-group">
+              <label>Origem</label>
+              <select value={form.origem} onChange={e => set('origem', e.target.value)}>
+                <option value="comprado">Comprado (leitão)</option>
+                <option value="nascido">Nascido na granja</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Custo de Aquisição (R$)</label>
+              <input type="number" step="0.01" min="0" value={form.custo_aquisicao}
+                onChange={e => set('custo_aquisicao', e.target.value)}
+                placeholder={form.origem === 'nascido' ? '0 (nascido na granja)' : 'Valor pago'}
+                disabled={form.origem === 'nascido'}
+              />
             </div>
             <div className="form-group">
               <label>Peso Entrada (kg)</label>

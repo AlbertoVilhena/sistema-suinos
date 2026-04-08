@@ -10,6 +10,7 @@ const navItems = [
   { to: '/sanidade', icon: '💉', label: 'Sanidade' },
   { to: '/reproducao', icon: '🫀', label: 'Reprodução' },
   { to: '/financeiro', icon: '💰', label: 'Financeiro', section: 'GESTÃO' },
+  { to: '/formulacao', icon: '🌾', label: 'Formulação Ração' },
   { to: '/relatorios', icon: '📈', label: 'Relatórios' },
   { to: '/usuarios', icon: '👥', label: 'Usuários', adminOnly: true },
 ]

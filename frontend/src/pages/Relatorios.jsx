@@ -122,19 +122,20 @@ export default function Relatorios() {
           {/* Detalhes */}
           <div className="table-container">
             <div className="table-toolbar">
-              <strong>Detalhes por Lote</strong>
+              <strong>Custo Total por Lote</strong>
             </div>
             <table>
               <thead>
                 <tr>
                   <th>Número</th>
-                  <th>Entrada</th>
                   <th>Fase</th>
-                  <th>Qtd Inicial</th>
                   <th>Qtd Atual</th>
-                  <th>Mortalidade</th>
                   <th>% Mort.</th>
                   <th>Custo Ração</th>
+                  <th>Custo Sanidade</th>
+                  <th>Custo Aquisição</th>
+                  <th>Total</th>
+                  <th>Custo/Animal</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -142,19 +143,18 @@ export default function Relatorios() {
                 {relLotes.map(l => (
                   <tr key={l.id}>
                     <td><strong>{l.numero}</strong></td>
-                    <td>{fmtData(l.data_entrada)}</td>
                     <td>{l.fase || '-'}</td>
-                    <td>{l.quantidade_inicial}</td>
                     <td>{l.quantidade_atual}</td>
-                    <td style={{ color: l.mortalidade > 0 ? '#dc3545' : '#198754' }}>
-                      {l.mortalidade}
-                    </td>
                     <td>
                       <span className={`badge ${l.taxa_mortalidade > 5 ? 'badge-red' : l.taxa_mortalidade > 2 ? 'badge-yellow' : 'badge-green'}`}>
                         {l.taxa_mortalidade}%
                       </span>
                     </td>
                     <td>{fmtMoeda(l.custo_total_alimentacao)}</td>
+                    <td>{fmtMoeda(l.custo_sanidade)}</td>
+                    <td>{fmtMoeda(l.custo_aquisicao_animais)}</td>
+                    <td style={{ fontWeight: 700 }}>{fmtMoeda(l.custo_total)}</td>
+                    <td style={{ color: '#0d6efd', fontWeight: 600 }}>{fmtMoeda(l.custo_por_animal)}</td>
                     <td>
                       <span className={`badge ${l.status === 'ativo' ? 'badge-green' : 'badge-gray'}`}>{l.status}</span>
                     </td>
@@ -185,6 +185,43 @@ export default function Relatorios() {
               </div>
             </div>
           </div>
+
+          {/* Custo operacional */}
+          {relFin.total_operacional > 0 && (
+            <div className="card" style={{ marginBottom: 20 }}>
+              <div className="card-title">🔧 Custos Operacionais (Fora do Financeiro)</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginTop: 16 }}>
+                <div className="stat-card">
+                  <div className="stat-icon green">🌽</div>
+                  <div>
+                    <div className="stat-value" style={{ fontSize: 16 }}>{fmtMoeda(relFin.custo_racao)}</div>
+                    <div className="stat-label">Custo Ração</div>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon blue">💉</div>
+                  <div>
+                    <div className="stat-value" style={{ fontSize: 16 }}>{fmtMoeda(relFin.custo_sanidade)}</div>
+                    <div className="stat-label">Custo Sanidade</div>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon orange">🐷</div>
+                  <div>
+                    <div className="stat-value" style={{ fontSize: 16 }}>{fmtMoeda(relFin.custo_aquisicao_animais)}</div>
+                    <div className="stat-label">Aquisição Animais</div>
+                  </div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-icon red">💼</div>
+                  <div>
+                    <div className="stat-value" style={{ fontSize: 16 }}>{fmtMoeda(relFin.total_operacional)}</div>
+                    <div className="stat-label">Total Operacional</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
             {/* Despesas */}
