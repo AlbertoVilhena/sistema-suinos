@@ -241,6 +241,18 @@ class Financeiro(db.Model):
 
 # ============== HELPERS ==============
 
+def to_int(val, default=None):
+    try:
+        return int(val) if val not in (None, '', 'null') else default
+    except (ValueError, TypeError):
+        return default
+
+def to_float(val, default=None):
+    try:
+        return float(val) if val not in (None, '', 'null') else default
+    except (ValueError, TypeError):
+        return default
+
 def get_current_user():
     uid = get_jwt_identity()
     return Usuario.query.get(uid)
@@ -253,6 +265,12 @@ def can_edit(role):
 
 def is_admin(role):
     return role == 'admin'
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    traceback.print_exc()
+    return jsonify({'error': str(e)}), 500
 
 
 # ============== AUTH ROUTES ==============
@@ -390,13 +408,15 @@ def create_lote():
     if Lote.query.filter_by(numero=data['numero']).first():
         return jsonify({'error': 'Número de lote já existe'}), 400
 
-    qtd = int(data['quantidade_inicial'])
+    qtd = to_int(data.get('quantidade_inicial'))
+    if not qtd:
+        return jsonify({'error': 'Quantidade inicial inválida'}), 400
     lote = Lote(
         numero=data['numero'],
         data_entrada=datetime.strptime(data['data_entrada'], '%Y-%m-%d').date(),
         quantidade_inicial=qtd,
-        quantidade_atual=int(data.get('quantidade_atual', qtd)),
-        peso_medio_entrada=data.get('peso_medio_entrada'),
+        quantidade_atual=to_int(data.get('quantidade_atual'), qtd),
+        peso_medio_entrada=to_float(data.get('peso_medio_entrada')),
         fase=data.get('fase'),
         status=data.get('status', 'ativo'),
         observacoes=data.get('observacoes'),
@@ -678,8 +698,8 @@ def create_alimentacao():
         lote_id=data['lote_id'],
         data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
         racao_tipo=data.get('racao_tipo'),
-        quantidade_kg=float(data['quantidade_kg']),
-        custo_unitario=float(data['custo_unitario']) if data.get('custo_unitario') else None,
+        quantidade_kg=to_float(data.get('quantidade_kg')),
+        custo_unitario=to_float(data.get('custo_unitario')),
         observacoes=data.get('observacoes')
     )
     db.session.add(alim)
@@ -750,9 +770,9 @@ def create_financeiro():
         tipo=data['tipo'],
         categoria=data.get('categoria'),
         descricao=data['descricao'],
-        valor=float(data['valor']),
+        valor=to_float(data.get('valor')),
         data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
-        lote_id=data.get('lote_id'),
+        lote_id=to_int(data.get('lote_id')),
         usuario_id=u.id
     )
     db.session.add(fin)
