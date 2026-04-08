@@ -29,7 +29,26 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=8)
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
-CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=False)
+CORS(app, origins="*", methods=["GET","POST","PUT","DELETE","OPTIONS"],
+     allow_headers=["Content-Type","Authorization","Accept"], send_wildcard=True)
+
+@app.after_request
+def inject_cors(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return response
+
+@app.before_request
+def handle_options():
+    from flask import request as req
+    if req.method == "OPTIONS":
+        from flask import make_response
+        r = make_response("", 204)
+        r.headers["Access-Control-Allow-Origin"] = "*"
+        r.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept"
+        r.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        return r
 
 # ============== MODELS ==============
 
@@ -479,33 +498,49 @@ def get_lote(lid):
 @app.route('/api/lotes', methods=['POST'])
 @jwt_required()
 def create_lote():
-    u = get_current_user()
-    if not can_write(u.role):
-        return jsonify({'error': 'Permissão negada'}), 403
+    try:
+        u = get_current_user()
+        if not can_write(u.role):
+            return jsonify({'error': 'Permissão negada'}), 403
 
-    data = request.get_json()
-    if not data.get('numero') or not data.get('data_entrada') or not data.get('quantidade_inicial'):
-        return jsonify({'error': 'Número, data de entrada e quantidade inicial são obrigatórios'}), 400
-    if Lote.query.filter_by(numero=data['numero']).first():
-        return jsonify({'error': 'Número de lote já existe'}), 400
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Body JSON inválido'}), 400
+        if not data.get('numero') or not data.get('data_entrada') or not data.get('quantidade_inicial'):
+            return jsonify({'error': 'Número, data de entrada e quantidade inicial são obrigatórios'}), 400
+        if Lote.query.filter_by(numero=data['numero']).first():
+            return jsonify({'error': 'Número de lote já existe'}), 400
 
-    qtd = to_int(data.get('quantidade_inicial'))
-    if not qtd:
-        return jsonify({'error': 'Quantidade inicial inválida'}), 400
-    lote = Lote(
-        numero=data['numero'],
-        data_entrada=datetime.strptime(data['data_entrada'], '%Y-%m-%d').date(),
-        quantidade_inicial=qtd,
-        quantidade_atual=to_int(data.get('quantidade_atual'), qtd),
-        peso_medio_entrada=to_float(data.get('peso_medio_entrada')),
-        fase=data.get('fase'),
-        status=data.get('status', 'ativo'),
-        observacoes=data.get('observacoes'),
-        usuario_id=u.id
-    )
-    db.session.add(lote)
-    db.session.commit()
-    return jsonify(lote.to_dict()), 201
+        qtd = to_int(data.get('quantidade_inicial'))
+        if not qtd:
+            return jsonify({'error': 'Quantidade inicial inválida'}), 400
+
+        data_entrada = data.get('data_entrada', '')
+        # Aceita YYYY-MM-DD ou DD/MM/YYYY
+        if '/' in data_entrada:
+            data_entrada_date = datetime.strptime(data_entrada, '%d/%m/%Y').date()
+        else:
+            data_entrada_date = datetime.strptime(data_entrada, '%Y-%m-%d').date()
+
+        lote = Lote(
+            numero=data['numero'],
+            data_entrada=data_entrada_date,
+            quantidade_inicial=qtd,
+            quantidade_atual=to_int(data.get('quantidade_atual'), qtd),
+            peso_medio_entrada=to_float(data.get('peso_medio_entrada')),
+            fase=data.get('fase') or None,
+            status=data.get('status', 'ativo'),
+            observacoes=data.get('observacoes') or None,
+            usuario_id=u.id
+        )
+        db.session.add(lote)
+        db.session.commit()
+        return jsonify(lote.to_dict()), 201
+    except Exception as e:
+        import traceback
+        db.session.rollback()
+        print('ERRO create_lote:', traceback.format_exc())
+        return jsonify({'error': f'Erro interno: {str(e)}'}), 500
 
 
 @app.route('/api/lotes/<int:lid>', methods=['PUT'])
@@ -1165,7 +1200,33 @@ def webhook():
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'version': '2.0.0'})
+    try:
+        tables = {
+            'usuarios': Usuario.query.count(),
+            'lotes': Lote.query.count(),
+            'animais': Animal.query.count(),
+            'ingredientes': Ingrediente.query.count(),
+            'formulacoes': Formulacao.query.count(),
+        }
+        return jsonify({'status': 'ok', 'version': '2.1.0', 'tables': tables})
+    except Exception as e:
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+
+@app.route('/api/debug/lote', methods=['POST'])
+def debug_lote():
+    """Endpoint sem JWT para testar insert de lote."""
+    try:
+        data = request.get_json()
+        return jsonify({
+            'received': data,
+            'numero': data.get('numero'),
+            'data_entrada': data.get('data_entrada'),
+            'quantidade_inicial': data.get('quantidade_inicial'),
+            'tipos': {k: type(v).__name__ for k, v in (data or {}).items()}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # ============== INIT ==============
