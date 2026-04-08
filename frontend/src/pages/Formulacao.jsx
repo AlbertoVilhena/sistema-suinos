@@ -89,7 +89,7 @@ export default function Formulacao() {
       setShowFormModal(false)
       load()
     } catch (e) {
-      setFormError(e.response?.data?.error || 'Erro ao salvar')
+      setFormError(e.response?.data?.error || e.response?.data?.msg || (e.response ? `Erro ${e.response.status}: ${JSON.stringify(e.response.data)}` : 'Sem resposta do servidor'))
     } finally {
       setSavingForm(false)
     }
@@ -124,7 +124,7 @@ export default function Formulacao() {
       setShowIngModal(false)
       load()
     } catch (e) {
-      setIngError(e.response?.data?.error || 'Erro ao salvar')
+      setIngError(e.response?.data?.error || e.response?.data?.msg || (e.response ? `Erro ${e.response.status}: ${JSON.stringify(e.response.data)}` : 'Sem resposta do servidor'))
     } finally {
       setSavingIng(false)
     }

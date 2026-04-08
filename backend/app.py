@@ -5,12 +5,11 @@ Flask API com autenticação JWT, CRUD completo e controle de roles
 
 import os
 from datetime import datetime, date, timedelta
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import (
     JWTManager, jwt_required, create_access_token, get_jwt_identity
 )
-from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import func
 
@@ -29,26 +28,24 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=8)
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
-CORS(app, origins="*", methods=["GET","POST","PUT","DELETE","OPTIONS"],
-     allow_headers=["Content-Type","Authorization","Accept"], send_wildcard=True)
+
+# ============== CORS MANUAL (sem Flask-CORS) ==============
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        resp = make_response("", 204)
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        resp.headers["Access-Control-Max-Age"] = "3600"
+        return resp
 
 @app.after_request
-def inject_cors(response):
+def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     return response
-
-@app.before_request
-def handle_options():
-    from flask import request as req
-    if req.method == "OPTIONS":
-        from flask import make_response
-        r = make_response("", 204)
-        r.headers["Access-Control-Allow-Origin"] = "*"
-        r.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept"
-        r.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        return r
 
 # ============== MODELS ==============
 

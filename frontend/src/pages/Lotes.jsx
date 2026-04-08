@@ -52,7 +52,8 @@ export default function Lotes() {
       setShowModal(false)
       load()
     } catch (e) {
-      setError(e.response?.data?.error || 'Erro ao salvar')
+      const msg = e.response?.data?.error || e.response?.data?.msg || (e.response ? `Erro ${e.response.status}: ${JSON.stringify(e.response.data)}` : 'Sem resposta do servidor')
+      setError(msg)
     } finally {
       setSaving(false)
     }
