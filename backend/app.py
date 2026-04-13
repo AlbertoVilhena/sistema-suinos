@@ -24,7 +24,7 @@ if database_url.startswith('postgres://'):
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'suinocultura-secret-2024-mude-em-producao')
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=8)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
