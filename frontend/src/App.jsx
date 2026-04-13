@@ -13,6 +13,7 @@ import Financeiro from './pages/Financeiro'
 import Relatorios from './pages/Relatorios'
 import Formulacao from './pages/Formulacao'
 import Usuarios from './pages/Usuarios'
+import Estoque from './pages/Estoque'
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { usuario, loading } = useAuth()
@@ -38,6 +39,7 @@ function AppRoutes() {
       <Route path="/financeiro" element={<ProtectedRoute><Financeiro /></ProtectedRoute>} />
       <Route path="/relatorios" element={<ProtectedRoute><Relatorios /></ProtectedRoute>} />
       <Route path="/formulacao" element={<ProtectedRoute><Formulacao /></ProtectedRoute>} />
+      <Route path="/estoque" element={<ProtectedRoute><Estoque /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute adminOnly><Usuarios /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

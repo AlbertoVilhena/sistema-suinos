@@ -336,6 +336,36 @@ class FormulacaoItem(db.Model):
         }
 
 
+
+class Estoque(db.Model):
+    __tablename__ = 'estoque'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False)
+    categoria = db.Column(db.String(30), default='outro')  # racao, medicamento, vacina, outro
+    unidade = db.Column(db.String(20), default='kg')
+    quantidade = db.Column(db.Float, default=0)
+    custo_unitario = db.Column(db.Float, default=0)
+    estoque_minimo = db.Column(db.Float, default=0)
+    observacoes = db.Column(db.Text)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    atualizado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nome': self.nome,
+            'categoria': self.categoria,
+            'unidade': self.unidade,
+            'quantidade': round(self.quantidade, 3),
+            'custo_unitario': self.custo_unitario,
+            'custo_total': round(self.quantidade * self.custo_unitario, 2),
+            'estoque_minimo': self.estoque_minimo,
+            'abaixo_minimo': self.quantidade < self.estoque_minimo,
+            'observacoes': self.observacoes,
+            'criado_em': self.criado_em.isoformat(),
+            'atualizado_em': self.atualizado_em.isoformat() if self.atualizado_em else None
+        }
+
 # ============== HELPERS ==============
 
 def to_int(val, default=None):
@@ -766,9 +796,16 @@ def update_reproducao(rid):
     for f in ['femea_brinco', 'macho_brinco', 'quantidade_nascidos', 'quantidade_vivos', 'status', 'observacoes', 'lote_id']:
         if f in data:
             setattr(rep, f, data[f])
-    for df in ['data_cobertura', 'data_parto_previsto', 'data_parto_real']:
-        if df in data and data[df]:
-            setattr(rep, df, datetime.strptime(data[df], '%Y-%m-%d').date())
+    # Atualizar datas
+    if 'data_cobertura' in data and data['data_cobertura']:
+        dc = datetime.strptime(data['data_cobertura'], '%Y-%m-%d').date()
+        rep.data_cobertura = dc
+        if not data.get('data_parto_previsto'):
+            rep.data_parto_previsto = dc + timedelta(days=114)
+    if 'data_parto_previsto' in data and data['data_parto_previsto']:
+        rep.data_parto_previsto = datetime.strptime(data['data_parto_previsto'], '%Y-%m-%d').date()
+    if 'data_parto_real' in data and data['data_parto_real']:
+        rep.data_parto_real = datetime.strptime(data['data_parto_real'], '%Y-%m-%d').date()
 
     db.session.commit()
     return jsonify(rep.to_dict())
@@ -902,6 +939,17 @@ def create_financeiro():
     )
     db.session.add(fin)
     db.session.commit()
+    # Atualizar estoque se vinculado
+    insumo_id = to_int(data.get('insumo_id'))
+    insumo_qtd = to_float(data.get('insumo_quantidade'))
+    if insumo_id and insumo_qtd and insumo_qtd > 0:
+        item_est = Estoque.query.get(insumo_id)
+        if item_est:
+            item_est.quantidade += insumo_qtd
+            if fin.valor and insumo_qtd:
+                item_est.custo_unitario = round(fin.valor / insumo_qtd, 4)
+            item_est.atualizado_em = datetime.utcnow()
+            db.session.commit()
     return jsonify(fin.to_dict()), 201
 
 
@@ -1225,6 +1273,122 @@ def debug_lote():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+
+# ============== ESTOQUE ==============
+
+@app.route('/api/estoque', methods=['GET'])
+@jwt_required()
+def get_estoque():
+    items = Estoque.query.order_by(Estoque.categoria, Estoque.nome).all()
+    return jsonify([i.to_dict() for i in items])
+
+@app.route('/api/estoque', methods=['POST'])
+@jwt_required()
+def create_estoque():
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    data = request.get_json()
+    if not data.get('nome'):
+        return jsonify({'error': 'Nome é obrigatório'}), 400
+    item = Estoque(
+        nome=data['nome'],
+        categoria=data.get('categoria', 'outro'),
+        unidade=data.get('unidade', 'kg'),
+        quantidade=to_float(data.get('quantidade'), 0),
+        custo_unitario=to_float(data.get('custo_unitario'), 0),
+        estoque_minimo=to_float(data.get('estoque_minimo'), 0),
+        observacoes=data.get('observacoes')
+    )
+    db.session.add(item)
+    db.session.commit()
+    return jsonify(item.to_dict()), 201
+
+@app.route('/api/estoque/<int:eid>', methods=['PUT'])
+@jwt_required()
+def update_estoque(eid):
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    item = Estoque.query.get_or_404(eid)
+    data = request.get_json()
+    for f in ['nome', 'categoria', 'unidade', 'observacoes']:
+        if f in data:
+            setattr(item, f, data[f])
+    for f in ['quantidade', 'custo_unitario', 'estoque_minimo']:
+        if f in data:
+            setattr(item, f, to_float(data.get(f), 0))
+    item.atualizado_em = datetime.utcnow()
+    db.session.commit()
+    return jsonify(item.to_dict())
+
+@app.route('/api/estoque/<int:eid>', methods=['DELETE'])
+@jwt_required()
+def delete_estoque(eid):
+    u = get_current_user()
+    if not can_edit(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    item = Estoque.query.get_or_404(eid)
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+@app.route('/api/estoque/<int:eid>/entrada', methods=['POST'])
+@jwt_required()
+def entrada_estoque(eid):
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    item = Estoque.query.get_or_404(eid)
+    data = request.get_json()
+    qtd = to_float(data.get('quantidade'), 0)
+    custo = to_float(data.get('custo_unitario'))
+    item.quantidade = round(item.quantidade + qtd, 3)
+    if custo is not None and custo > 0:
+        item.custo_unitario = custo
+    item.atualizado_em = datetime.utcnow()
+    db.session.commit()
+    return jsonify(item.to_dict())
+
+# ============== ANIMAIS EM LOTE ==============
+
+@app.route('/api/lotes/<int:lid>/criar-animais', methods=['POST'])
+@jwt_required()
+def criar_animais_lote(lid):
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    lote = Lote.query.get_or_404(lid)
+    data = request.get_json()
+    quantidade = to_int(data.get('quantidade'), 0)
+    if not quantidade or quantidade <= 0 or quantidade > 500:
+        return jsonify({'error': 'Quantidade deve ser entre 1 e 500'}), 400
+    sexo = data.get('sexo', 'macho')
+    raca = data.get('raca', '')
+    peso_entrada = to_float(data.get('peso_entrada'))
+    origem = data.get('origem', 'nascido')
+    custo_aquisicao = to_float(data.get('custo_aquisicao'), 0)
+    prefixo = data.get('prefixo_brinco') or f'L{lid}-'
+    num_ini = to_int(data.get('numero_inicial'), 1)
+    animais_criados = []
+    for i in range(quantidade):
+        num = num_ini + i
+        animal = Animal(
+            lote_id=lid,
+            brinco=f'{prefixo}{num:03d}',
+            sexo=sexo,
+            raca=raca or None,
+            peso_entrada=peso_entrada,
+            peso_atual=peso_entrada,
+            status='ativo',
+            origem=origem,
+            custo_aquisicao=custo_aquisicao
+        )
+        db.session.add(animal)
+        animais_criados.append(animal.brinco)
+    db.session.commit()
+    return jsonify({'criados': len(animais_criados), 'brincos': animais_criados[:10]}), 201
 
 # ============== INIT ==============
 

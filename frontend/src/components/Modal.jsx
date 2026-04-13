@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 
-export default function Modal({ title, onClose, onSave, saving, children, size = '' }) {
+export default function Modal({ title, onClose, onSave, saving, children, size = '', saveLabel = '' }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
@@ -23,7 +23,7 @@ export default function Modal({ title, onClose, onSave, saving, children, size =
           </button>
           {onSave && (
             <button className="btn btn-primary" onClick={onSave} disabled={saving}>
-              {saving ? '⏳ Salvando...' : '✅ Salvar'}
+              {saving ? '⏳ Salvando...' : (saveLabel || '✅ Salvar')}
             </button>
           )}
         </div>

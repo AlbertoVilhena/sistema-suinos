@@ -33,6 +33,10 @@ export default function Reproducao() {
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [showCriarLoteModal, setShowCriarLoteModal] = useState(false)
+  const [partoData, setPartoData] = useState(null)
+  const [loteForm, setLoteForm] = useState({})
+  const [savingLote, setSavingLote] = useState(false)
 
   const load = () => {
     Promise.all([api.get('/api/reproducoes'), api.get('/api/lotes')])
@@ -49,18 +53,47 @@ export default function Reproducao() {
     setError('')
     setSaving(true)
     try {
+      let saved
       if (editing) {
-        await api.put(`/api/reproducoes/${editing.id}`, form)
+        const res = await api.put(`/api/reproducoes/${editing.id}`, form)
+        saved = res.data
       } else {
-        await api.post('/api/reproducoes', form)
+        const res = await api.post('/api/reproducoes', form)
+        saved = res.data
       }
       setShowModal(false)
       load()
+      // If status is parto and has nascidos, offer to create a lote
+      if (saved.status === 'parto' && saved.quantidade_nascidos > 0) {
+        setPartoData(saved)
+        setLoteForm({
+          numero: `PARTO-${saved.id}`,
+          data_entrada: saved.data_parto_real || today,
+          quantidade_inicial: saved.quantidade_vivos || saved.quantidade_nascidos,
+          fase: 'maternidade',
+          observacoes: `Lote criado a partir do parto da fêmea ${saved.femea_brinco || ''}`
+        })
+        setShowCriarLoteModal(true)
+      }
     } catch (e) {
       const msg = e.response?.data?.error || e.response?.data?.msg || (e.response ? `Erro ${e.response.status}: ${JSON.stringify(e.response.data)}` : 'Sem resposta do servidor')
       setError(msg)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleCriarLote = async () => {
+    setSavingLote(true)
+    try {
+      await api.post('/api/lotes', loteForm)
+      setShowCriarLoteModal(false)
+      load()
+      alert(`Lote "${loteForm.numero}" criado com sucesso!`)
+    } catch (e) {
+      alert(e.response?.data?.error || 'Erro ao criar lote')
+    } finally {
+      setSavingLote(false)
     }
   }
 
@@ -70,7 +103,19 @@ export default function Reproducao() {
     catch (e) { alert(e.response?.data?.error || 'Erro ao excluir') }
   }
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const set = (k, v) => {
+    setForm(f => {
+      const updated = { ...f, [k]: v }
+      if (k === 'data_cobertura' && v) {
+        const dc = new Date(v + 'T00:00:00')
+        dc.setDate(dc.getDate() + 114)
+        updated.data_parto_previsto = dc.toISOString().split('T')[0]
+      }
+      return updated
+    })
+  }
+
+  const setLF = (k, v) => setLoteForm(f => ({ ...f, [k]: v }))
 
   const filtered = reproducoes.filter(r => !filterStatus || r.status === filterStatus)
 
@@ -203,6 +248,49 @@ export default function Reproducao() {
             <div className="form-group span-2">
               <label>Observações</label>
               <textarea value={form.observacoes} onChange={e => set('observacoes', e.target.value)} />
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showCriarLoteModal && partoData && (
+        <Modal
+          title="🐖 Criar Lote deste Parto?"
+          onClose={() => setShowCriarLoteModal(false)}
+          onSave={handleCriarLote}
+          saving={savingLote}
+          saveLabel="✅ Criar Lote"
+        >
+          <div style={{ marginBottom: 12, padding: '10px 14px', background: '#d1e7dd', borderRadius: 8, fontSize: 14 }}>
+            Parto registrado com <strong>{partoData.quantidade_nascidos}</strong> nascidos
+            ({partoData.quantidade_vivos ?? partoData.quantidade_nascidos} vivos).
+            Deseja criar um lote para esses leitões?
+          </div>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Número do Lote *</label>
+              <input value={loteForm.numero} onChange={e => setLF('numero', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Data de Entrada *</label>
+              <input type="date" value={loteForm.data_entrada} onChange={e => setLF('data_entrada', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Quantidade Inicial *</label>
+              <input type="number" min="1" value={loteForm.quantidade_inicial} onChange={e => setLF('quantidade_inicial', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Fase</label>
+              <select value={loteForm.fase} onChange={e => setLF('fase', e.target.value)}>
+                <option value="maternidade">Maternidade</option>
+                <option value="creche">Creche</option>
+                <option value="crescimento">Crescimento</option>
+                <option value="terminacao">Terminação</option>
+              </select>
+            </div>
+            <div className="form-group span-2">
+              <label>Observações</label>
+              <textarea value={loteForm.observacoes} onChange={e => setLF('observacoes', e.target.value)} rows={2} />
             </div>
           </div>
         </Modal>
