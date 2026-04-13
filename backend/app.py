@@ -352,7 +352,7 @@ def to_float(val, default=None):
 
 def get_current_user():
     uid = get_jwt_identity()
-    return Usuario.query.get(uid)
+    return Usuario.query.get(int(uid))
 
 def can_write(role):
     return role in ['admin', 'gerente', 'operador']
@@ -382,7 +382,7 @@ def login():
     if not user or not check_password_hash(user.senha_hash, senha):
         return jsonify({'error': 'Email ou senha inválidos'}), 401
 
-    token = create_access_token(identity=user.id)
+    token = create_access_token(identity=str(user.id))
     return jsonify({'token': token, 'usuario': user.to_dict()})
 
 
