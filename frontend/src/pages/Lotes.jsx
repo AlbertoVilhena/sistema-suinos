@@ -9,8 +9,10 @@ const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
 const faseBadge = { maternidade: 'badge-purple', creche: 'badge-blue', crescimento: 'badge-teal', terminacao: 'badge-yellow' }
 const statusBadge = { ativo: 'badge-green', encerrado: 'badge-gray', vendido: 'badge-blue' }
 
+const today = new Date().toISOString().split('T')[0]
+
 const emptyForm = {
-  numero: '', data_entrada: '', quantidade_inicial: '', quantidade_atual: '',
+  numero: '', data_entrada: today, quantidade_inicial: '', quantidade_atual: '',
   peso_medio_entrada: '', fase: 'creche', status: 'ativo', observacoes: ''
 }
 

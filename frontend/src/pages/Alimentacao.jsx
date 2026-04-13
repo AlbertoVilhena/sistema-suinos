@@ -7,8 +7,10 @@ import { useAuth } from '../context/AuthContext'
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 
+const today = new Date().toISOString().split('T')[0]
+
 const emptyForm = {
-  lote_id: '', data: '', racao_tipo: '', quantidade_kg: '', custo_unitario: '', observacoes: ''
+  lote_id: '', data: today, racao_tipo: '', quantidade_kg: '', custo_unitario: '', observacoes: ''
 }
 
 export default function Alimentacao() {

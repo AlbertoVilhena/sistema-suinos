@@ -13,8 +13,10 @@ const statusBadge = {
   encerrado: 'badge-gray'
 }
 
+const today = new Date().toISOString().split('T')[0]
+
 const emptyForm = {
-  lote_id: '', femea_brinco: '', macho_brinco: '', data_cobertura: '',
+  lote_id: '', femea_brinco: '', macho_brinco: '', data_cobertura: today,
   data_parto_previsto: '', data_parto_real: '',
   quantidade_nascidos: '', quantidade_vivos: '',
   status: 'gestacao', observacoes: ''

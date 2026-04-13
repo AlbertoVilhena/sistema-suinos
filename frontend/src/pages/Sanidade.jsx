@@ -6,8 +6,10 @@ import { useAuth } from '../context/AuthContext'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 
+const today = new Date().toISOString().split('T')[0]
+
 const emptyForm = {
-  lote_id: '', animal_id: '', vacina: '', data: '', dose: '', responsavel: '', custo: '', observacoes: ''
+  lote_id: '', animal_id: '', vacina: '', data: today, dose: '', responsavel: '', custo: '', observacoes: ''
 }
 
 export default function Sanidade() {

@@ -10,8 +10,10 @@ const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFr
 const catReceitas = ['Venda de Animais', 'Venda de Leitões', 'Subsídio', 'Outros']
 const catDespesas = ['Ração', 'Medicamentos', 'Mão de Obra', 'Energia', 'Água', 'Manutenção', 'Equipamentos', 'Transporte', 'Outros']
 
+const today = new Date().toISOString().split('T')[0]
+
 const emptyForm = {
-  tipo: 'despesa', categoria: '', descricao: '', valor: '', data: '', lote_id: '', observacoes: ''
+  tipo: 'despesa', categoria: '', descricao: '', valor: '', data: today, lote_id: '', observacoes: ''
 }
 
 export default function Financeiro() {
