@@ -207,9 +207,16 @@ export default function Financeiro() {
                       value={form.insumo_quantidade} onChange={e => set('insumo_quantidade', e.target.value)} />
                   )}
                 </div>
-                {form.insumo_id && form.insumo_quantidade && form.valor && (
-                  <div style={{ fontSize: 12, color: '#6c757d', marginTop: 4 }}>
-                    Custo unitario calculado: R$ {(Number(form.valor) / Number(form.insumo_quantidade)).toFixed(4)} por {selectedEstoque?.unidade}
+                {form.insumo_id && selectedEstoque && (
+                  <div style={{ fontSize: 12, color: '#6c757d', marginTop: 4, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    <span>Estoque atual: <strong>{Number(selectedEstoque.quantidade).toFixed(2)} {selectedEstoque.unidade}</strong></span>
+                    <span>Custo atual: <strong>R$ {Number(selectedEstoque.custo_unitario).toFixed(4)}/{selectedEstoque.unidade}</strong></span>
+                    {form.insumo_quantidade && form.valor && (
+                      <span style={{ color: '#0d6efd' }}>Novo custo: <strong>R$ {(Number(form.valor) / Number(form.insumo_quantidade)).toFixed(4)}/{selectedEstoque.unidade}</strong></span>
+                    )}
+                    {form.insumo_quantidade && (
+                      <span style={{ color: '#198754' }}>Após entrada: <strong>{(Number(selectedEstoque.quantidade) + Number(form.insumo_quantidade)).toFixed(2)} {selectedEstoque.unidade}</strong></span>
+                    )}
                   </div>
                 )}
               </div>

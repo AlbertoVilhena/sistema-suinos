@@ -963,13 +963,28 @@ def update_financeiro(fid):
     fin = Financeiro.query.get_or_404(fid)
     data = request.get_json()
 
-    for f in ['tipo', 'categoria', 'descricao', 'valor', 'lote_id']:
+    for f in ['tipo', 'categoria', 'descricao', 'lote_id']:
         if f in data:
             setattr(fin, f, data[f])
+    if 'valor' in data:
+        fin.valor = to_float(data.get('valor'))
     if 'data' in data:
         fin.data = datetime.strptime(data['data'], '%Y-%m-%d').date()
 
     db.session.commit()
+
+    # Atualizar estoque se vinculado
+    insumo_id = to_int(data.get('insumo_id'))
+    insumo_qtd = to_float(data.get('insumo_quantidade'))
+    if insumo_id and insumo_qtd and insumo_qtd > 0:
+        item_est = Estoque.query.get(insumo_id)
+        if item_est:
+            item_est.quantidade = round(item_est.quantidade + insumo_qtd, 3)
+            if fin.valor and insumo_qtd:
+                item_est.custo_unitario = round(fin.valor / insumo_qtd, 4)
+            item_est.atualizado_em = datetime.utcnow()
+            db.session.commit()
+
     return jsonify(fin.to_dict())
 
 
