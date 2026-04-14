@@ -1201,11 +1201,12 @@ def relatorio_lotes():
             **lote.to_dict(),
             'mortalidade': mortalidade,
             'taxa_mortalidade': round(taxa_mort, 2),
-            'custo_total_alimentacao': round(custo_alim, 2),
+            'custo_racao': round(custo_alim, 2),
             'custo_sanidade': round(custo_sanidade, 2),
             'custo_aquisicao_animais': round(custo_aquisicao, 2),
-            'custo_total': round(custo_total, 2),
+            'total_operacional': round(custo_total, 2),
             'custo_por_animal': round(custo_total / qtd_atual, 2) if qtd_atual else 0,
+            'peso_medio_saida': lote.peso_medio_entrada or 0,
         })
     return jsonify(result)
 
@@ -1233,9 +1234,16 @@ def relatorio_financeiro():
     ).filter_by(tipo='despesa').group_by(Financeiro.categoria).all()
 
     return jsonify({
-        'total_receitas': total_rec,
-        'total_despesas': total_desp,
-        'lucro': total_rec - total_desp,
+        'total_receitas': round(total_rec, 2),
+        'total_despesas': round(total_desp, 2),
+        'saldo': round(total_rec - total_desp, 2),
+        'lucro': round(total_rec - total_desp, 2),
+        'custos_operacionais': {
+            'custo_racao': round(custo_racao, 2),
+            'custo_sanidade': round(custo_sanidade, 2),
+            'custo_aquisicao_animais': round(custo_aquisicao, 2),
+            'total_operacional': round(total_operacional, 2),
+        },
         'custo_racao': round(custo_racao, 2),
         'custo_sanidade': round(custo_sanidade, 2),
         'custo_aquisicao_animais': round(custo_aquisicao, 2),

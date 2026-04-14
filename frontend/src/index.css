@@ -845,57 +845,97 @@ textarea {
 
 /* ===== PRINT / PDF STYLES ===== */
 @media print {
-  /* Ocultar elementos de navegação */
+  /* Ocultar sidebar, header e elementos de UI */
   .sidebar,
-  .navbar,
+  .header,
   .page-header,
   .tabs,
   .no-print,
   .btn,
   button,
   .filter-bar,
-  .table-toolbar .btn,
-  .actions {
+  .table-toolbar,
+  .actions,
+  .stat-icon {
     display: none !important;
   }
 
-  /* Layout para impressão */
+  /* Resetar layout de duas colunas */
+  .app-layout {
+    display: block !important;
+  }
+
+  .main-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  .page-content {
+    padding: 0 !important;
+  }
+
   body {
     background: white !important;
     color: black !important;
-    font-size: 11pt !important;
-  }
-
-  .main-content,
-  .content-area,
-  main {
-    margin: 0 !important;
-    padding: 0 !important;
-    max-width: 100% !important;
+    font-size: 10pt !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   .card {
     break-inside: avoid;
     box-shadow: none !important;
     border: 1px solid #dee2e6 !important;
-    margin-bottom: 12pt !important;
+    margin-bottom: 10pt !important;
+    padding: 10pt !important;
+  }
+
+  .card-title {
+    font-size: 11pt !important;
+    font-weight: 700 !important;
+    margin-bottom: 8pt !important;
   }
 
   table {
     width: 100% !important;
-    font-size: 9pt !important;
+    font-size: 8pt !important;
     border-collapse: collapse !important;
   }
 
-  th, td {
+  th {
+    background: #f0f0f0 !important;
+    font-size: 7.5pt !important;
+    padding: 4pt 5pt !important;
+    border: 1px solid #ccc !important;
+  }
+
+  td {
     border: 1px solid #dee2e6 !important;
-    padding: 4pt 6pt !important;
+    padding: 3pt 5pt !important;
+    font-size: 8pt !important;
   }
 
   .badge {
-    border: 1px solid currentColor !important;
+    font-size: 7pt !important;
+    padding: 1pt 4pt !important;
+    border: 1px solid #999 !important;
     background: transparent !important;
-    color: inherit !important;
+  }
+
+  /* Stat cards em grid para impressão */
+  .stat-card {
+    box-shadow: none !important;
+    border: 1px solid #dee2e6 !important;
+    padding: 6pt 10pt !important;
+  }
+
+  .stat-value {
+    font-size: 14pt !important;
+  }
+
+  .stat-label {
+    font-size: 8pt !important;
   }
 
   /* Mostrar apenas na impressão */
@@ -907,30 +947,24 @@ textarea {
     text-align: center;
     border-bottom: 2pt solid #198754;
     padding-bottom: 8pt;
-    margin-bottom: 16pt;
+    margin-bottom: 14pt;
   }
 
   .print-header h2 {
     font-size: 16pt;
-    color: #198754;
-    margin: 0 0 4pt 0;
+    color: #198754 !important;
+    margin: 0 0 3pt 0;
   }
 
   .print-header p {
     font-size: 9pt;
-    color: #6c757d;
+    color: #555;
     margin: 0;
   }
 
-  /* Stat cards em linha na impressão */
-  .stat-card {
-    box-shadow: none !important;
-    border: 1px solid #dee2e6 !important;
-  }
-
   @page {
-    margin: 15mm;
-    size: A4;
+    margin: 12mm 10mm;
+    size: A4 landscape;
   }
 }
 
