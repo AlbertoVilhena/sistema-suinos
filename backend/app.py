@@ -1429,3 +1429,119 @@ init_db()
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true')
+
+# ============== ANÁLISE IA — VENDA ==============
+
+@app.route('/api/analise/venda', methods=['GET'])
+@jwt_required()
+def analise_venda():
+    """Análise inteligente do momento ideal de venda por lote"""
+    lotes = Lote.query.filter_by(status='ativo').all()
+    resultado = []
+
+    for lote in lotes:
+        animais = Animal.query.filter_by(lote_id=lote.id, status='ativo').all()
+        alimentacoes = Alimentacao.query.filter_by(lote_id=lote.id).all()
+        vacinacoes = Vacinacao.query.filter_by(lote_id=lote.id).all()
+
+        qtd = len(animais)
+        if qtd == 0:
+            continue
+
+        # Métricas de peso
+        pesos = [a.peso_atual for a in animais if a.peso_atual]
+        peso_medio = sum(pesos) / len(pesos) if pesos else 0
+
+        # Ganho de peso médio diário
+        dias_producao = (date.today() - lote.data_entrada).days if lote.data_entrada else 0
+        pesos_entrada = [a.peso_entrada for a in animais if a.peso_entrada]
+        peso_medio_entrada = sum(pesos_entrada) / len(pesos_entrada) if pesos_entrada else (lote.peso_medio_entrada or 0)
+        ganho_total = peso_medio - peso_medio_entrada
+        ganho_diario = round(ganho_total / max(dias_producao, 1), 3)
+
+        # Custos
+        custo_racao = sum((a.quantidade_kg or 0) * (a.custo_unitario or 0) for a in alimentacoes)
+        custo_sanidade = sum(v.custo or 0 for v in vacinacoes)
+        custo_aquisicao = sum(a.custo_aquisicao or 0 for a in animais)
+        custo_total = custo_racao + custo_sanidade + custo_aquisicao
+        peso_total_kg = peso_medio * qtd
+        custo_por_kg = round(custo_total / max(peso_total_kg, 1), 4)
+
+        # Peso alvo (terminação = 110-120 kg)
+        peso_alvo = 115
+        dias_para_alvo = max(0, round((peso_alvo - peso_medio) / max(ganho_diario, 0.001))) if ganho_diario > 0 else 999
+
+        # Preço mínimo para lucro (margem 20%)
+        preco_minimo = round(custo_por_kg * 1.2, 2)
+
+        # ===== LÓGICA DE RECOMENDAÇÃO =====
+        alertas = []
+
+        if peso_medio >= 110:
+            recomendacao = 'VENDER AGORA'
+            icone = '🟢'
+            cor = '#198754'
+            justificativa = f'Peso médio ({peso_medio:.1f} kg) atingiu o ponto ótimo de abate (>110 kg). Venda imediata maximiza retorno.'
+        elif peso_medio >= 95 and ganho_diario < 0.4:
+            recomendacao = 'VENDER EM BREVE'
+            icone = '🟡'
+            cor = '#ffc107'
+            justificativa = f'Peso próximo do alvo ({peso_medio:.1f} kg) mas ganho diário baixo ({ganho_diario:.3f} kg/dia). Custo-benefício de esperar é baixo.'
+        elif peso_medio >= 85 and dias_para_alvo <= 30:
+            recomendacao = f'AGUARDAR ~{dias_para_alvo} DIAS'
+            icone = '🔵'
+            cor = '#0d6efd'
+            justificativa = f'Faltam ~{dias_para_alvo} dias para atingir {peso_alvo} kg. Ganho diário de {ganho_diario:.3f} kg/dia está adequado.'
+        elif peso_medio < 60:
+            recomendacao = 'FASE INICIAL'
+            icone = '⚪'
+            cor = '#6c757d'
+            justificativa = f'Animais ainda em fase de crescimento ({peso_medio:.1f} kg). Estimativa: ~{dias_para_alvo} dias para peso de abate.'
+        else:
+            recomendacao = f'AGUARDAR ~{dias_para_alvo} DIAS'
+            icone = '🔵'
+            cor = '#0d6efd'
+            justificativa = f'Em desenvolvimento ({peso_medio:.1f} kg). Previsão de abate em ~{dias_para_alvo} dias com ganho de {ganho_diario:.3f} kg/dia.'
+
+        # Alertas automáticos
+        if ganho_diario < 0.2 and peso_medio < 100:
+            alertas.append(f'Ganho diário baixo ({ganho_diario:.3f} kg/dia). Verificar alimentação e saúde do lote.')
+        if custo_por_kg > 8:
+            alertas.append(f'Custo por kg elevado (R$ {custo_por_kg:.2f}/kg). Revisar eficiência da ração.')
+        taxa_mortalidade = ((lote.quantidade_inicial - qtd) / max(lote.quantidade_inicial, 1)) * 100
+        if taxa_mortalidade > 5:
+            alertas.append(f'Taxa de mortalidade alta ({taxa_mortalidade:.1f}%). Verificar sanidade do lote.')
+
+        resultado.append({
+            'lote_id': lote.id,
+            'numero': lote.numero,
+            'fase': lote.fase,
+            'qtd_animais': qtd,
+            'peso_medio_atual': round(peso_medio, 2),
+            'peso_medio_entrada': round(peso_medio_entrada, 2),
+            'ganho_diario_medio': ganho_diario,
+            'dias_em_producao': dias_producao,
+            'dias_para_peso_alvo': dias_para_alvo if dias_para_alvo < 900 else -1,
+            'custo_total': round(custo_total, 2),
+            'custo_por_kg': custo_por_kg,
+            'preco_minimo_lucro': preco_minimo,
+            'recomendacao': recomendacao,
+            'icone_recomendacao': icone,
+            'cor_recomendacao': cor,
+            'justificativa': justificativa,
+            'alertas': alertas
+        })
+
+    prontos = sum(1 for l in resultado if 'VENDER AGORA' in l['recomendacao'])
+    aguardar = sum(1 for l in resultado if 'AGUARDAR' in l['recomendacao'])
+    receita_potencial = sum(l['peso_medio_atual'] * l['qtd_animais'] * 5.5 for l in resultado)  # R$5,50/kg estimado
+
+    return jsonify({
+        'lotes': resultado,
+        'resumo': {
+            'total_lotes': len(resultado),
+            'prontos_venda': prontos,
+            'aguardar': aguardar,
+            'receita_potencial': round(receita_potencial, 2)
+        }
+    })

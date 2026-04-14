@@ -20,7 +20,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status
+    const msg = error.response?.data?.msg || error.response?.data?.error || ''
+    const isJwtError = status === 422 && (msg.includes('string') || msg.includes('token') || msg.includes('Subject'))
+    if (status === 401 || isJwtError) {
       localStorage.removeItem('token')
       localStorage.removeItem('usuario')
       window.location.href = '/login'
