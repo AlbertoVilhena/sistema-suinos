@@ -950,6 +950,12 @@ def create_financeiro():
                 item_est.custo_unitario = round(fin.valor / insumo_qtd, 4)
             item_est.atualizado_em = datetime.utcnow()
             db.session.commit()
+    # Marcar lote como vendido se receita de venda de animais
+    if fin.tipo == 'receita' and fin.lote_id and fin.categoria in ('Venda de Animais', 'Venda de Leitoes'):
+        lote = Lote.query.get(fin.lote_id)
+        if lote and lote.status != 'vendido':
+            lote.status = 'vendido'
+            db.session.commit()
     return jsonify(fin.to_dict()), 201
 
 
@@ -983,6 +989,12 @@ def update_financeiro(fid):
             if fin.valor and insumo_qtd:
                 item_est.custo_unitario = round(fin.valor / insumo_qtd, 4)
             item_est.atualizado_em = datetime.utcnow()
+            db.session.commit()
+    # Marcar lote como vendido se receita de venda de animais
+    if fin.tipo == 'receita' and fin.lote_id and fin.categoria in ('Venda de Animais', 'Venda de Leitoes'):
+        lote = Lote.query.get(fin.lote_id)
+        if lote and lote.status != 'vendido':
+            lote.status = 'vendido'
             db.session.commit()
 
     return jsonify(fin.to_dict())
@@ -1197,6 +1209,16 @@ def relatorio_lotes():
         custo_aquisicao = sum((a.custo_aquisicao or 0) for a in animais_lote)
         custo_total = custo_alim + custo_sanidade + custo_aquisicao
         qtd_atual = lote.quantidade_atual or 1
+        # Receitas vinculadas ao lote (ex: venda de animais)
+        receita_lote = db.session.query(func.sum(Financeiro.valor)).filter_by(
+            lote_id=lote.id, tipo='receita'
+        ).scalar() or 0
+        # Despesas financeiras adicionais vinculadas ao lote
+        despesa_fin_lote = db.session.query(func.sum(Financeiro.valor)).filter_by(
+            lote_id=lote.id, tipo='despesa'
+        ).scalar() or 0
+        custo_total_com_fin = custo_total + despesa_fin_lote
+        resultado_lote = receita_lote - custo_total_com_fin
         result.append({
             **lote.to_dict(),
             'mortalidade': mortalidade,
@@ -1204,9 +1226,11 @@ def relatorio_lotes():
             'custo_racao': round(custo_alim, 2),
             'custo_sanidade': round(custo_sanidade, 2),
             'custo_aquisicao_animais': round(custo_aquisicao, 2),
-            'total_operacional': round(custo_total, 2),
-            'custo_por_animal': round(custo_total / qtd_atual, 2) if qtd_atual else 0,
+            'total_operacional': round(custo_total_com_fin, 2),
+            'custo_por_animal': round(custo_total_com_fin / qtd_atual, 2) if qtd_atual else 0,
             'peso_medio_saida': lote.peso_medio_entrada or 0,
+            'receita_lote': round(receita_lote, 2),
+            'resultado_lote': round(resultado_lote, 2),
         })
     return jsonify(result)
 
@@ -1233,6 +1257,26 @@ def relatorio_financeiro():
         Financeiro.categoria, func.sum(Financeiro.valor).label('total')
     ).filter_by(tipo='despesa').group_by(Financeiro.categoria).all()
 
+    # Resultado por lote
+    lotes = Lote.query.all()
+    resultado_por_lote = []
+    for lote in lotes:
+        rec_l = db.session.query(func.sum(Financeiro.valor)).filter_by(lote_id=lote.id, tipo='receita').scalar() or 0
+        desp_l = db.session.query(func.sum(Financeiro.valor)).filter_by(lote_id=lote.id, tipo='despesa').scalar() or 0
+        custo_alim_l = sum((a.quantidade_kg * (a.custo_unitario or 0)) for a in lote.alimentacoes)
+        custo_san_l = sum((v.custo or 0) for v in lote.vacinacoes)
+        animais_l = Animal.query.filter_by(lote_id=lote.id).all()
+        custo_aq_l = sum((a.custo_aquisicao or 0) for a in animais_l)
+        custo_total_l = desp_l + custo_alim_l + custo_san_l + custo_aq_l
+        resultado_por_lote.append({
+            'lote_id': lote.id,
+            'lote_numero': lote.numero,
+            'status': lote.status,
+            'receita': round(rec_l, 2),
+            'custo_total': round(custo_total_l, 2),
+            'resultado': round(rec_l - custo_total_l, 2),
+        })
+
     return jsonify({
         'total_receitas': round(total_rec, 2),
         'total_despesas': round(total_desp, 2),
@@ -1249,7 +1293,8 @@ def relatorio_financeiro():
         'custo_aquisicao_animais': round(custo_aquisicao, 2),
         'total_operacional': round(total_operacional, 2),
         'receitas_por_categoria': [{'categoria': r[0] or 'Outros', 'total': float(r[1])} for r in rec_cat],
-        'despesas_por_categoria': [{'categoria': d[0] or 'Outros', 'total': float(d[1])} for d in desp_cat]
+        'despesas_por_categoria': [{'categoria': d[0] or 'Outros', 'total': float(d[1])} for d in desp_cat],
+        'resultado_por_lote': resultado_por_lote,
     })
 
 

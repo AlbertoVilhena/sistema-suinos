@@ -96,17 +96,17 @@ export default function Relatorios() {
                 <thead>
                   <tr>
                     <th>Lote</th><th>Fase</th><th>Status</th><th>Qtd Inicial</th><th>Qtd Atual</th>
-                    <th>Mortalidade</th><th>Custo Ração</th><th>Custo Sanidade</th><th>Custo Aquisição</th><th>Total</th><th>Custo/Animal</th>
+                    <th>Mortalidade</th><th>Custo Ração</th><th>Custo Sanidade</th><th>Custo Aquisição</th><th>Total Custos</th><th>Custo/Animal</th><th>Receita</th><th>Resultado</th>
                   </tr>
                 </thead>
                 <tbody>
                   {relLotes.length === 0
-                    ? <tr><td colSpan={11} className="table-empty">Nenhum lote cadastrado</td></tr>
+                    ? <tr><td colSpan={13} className="table-empty">Nenhum lote cadastrado</td></tr>
                     : relLotes.map(l => (
                       <tr key={l.id}>
                         <td><strong>{l.numero}</strong><div style={{ fontSize: 11, color: '#6c757d' }}>{fmtData(l.data_entrada)}</div></td>
                         <td>{l.fase || '-'}</td>
-                        <td><span className={`badge ${l.status === 'ativo' ? 'badge-green' : 'badge-gray'}`}>{l.status}</span></td>
+                        <td><span className={`badge ${l.status === 'ativo' ? 'badge-green' : l.status === 'vendido' ? 'badge-blue' : 'badge-gray'}`}>{l.status}</span></td>
                         <td>{l.quantidade_inicial}</td>
                         <td>{l.quantidade_atual}</td>
                         <td style={{ color: l.taxa_mortalidade > 5 ? '#dc3545' : 'inherit' }}>{fmtNum(l.taxa_mortalidade)}%</td>
@@ -115,6 +115,10 @@ export default function Relatorios() {
                         <td>{fmtMoeda(l.custo_aquisicao_animais)}</td>
                         <td style={{ fontWeight: 600 }}>{fmtMoeda(l.total_operacional)}</td>
                         <td>{fmtMoeda(l.custo_por_animal)}</td>
+                        <td style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(l.receita_lote)}</td>
+                        <td style={{ fontWeight: 700, color: l.resultado_lote >= 0 ? '#198754' : '#dc3545' }}>
+                          {l.resultado_lote >= 0 ? '+' : ''}{fmtMoeda(l.resultado_lote)}
+                        </td>
                       </tr>
                     ))}
                 </tbody>
@@ -153,6 +157,32 @@ export default function Relatorios() {
               <div style={{ marginTop: 16 }}><BarChart items={rec.map(r => ({ label: r.categoria || 'Outros', value: r.total, formatted: fmtMoeda(r.total) }))} maxValue={maxRec} /></div>
             </div>
           </div>
+
+          {relFin.resultado_por_lote?.length > 0 && (
+            <div className="card" style={{ marginTop: 16 }}>
+              <div className="card-title">🐖 Resultado por Lote</div>
+              <div style={{ overflowX: 'auto', marginTop: 12 }}>
+                <table>
+                  <thead>
+                    <tr><th>Lote</th><th>Status</th><th>Receita</th><th>Custo Total</th><th>Resultado</th></tr>
+                  </thead>
+                  <tbody>
+                    {relFin.resultado_por_lote.map(l => (
+                      <tr key={l.lote_id}>
+                        <td><strong>{l.lote_numero}</strong></td>
+                        <td><span className={`badge ${l.status === 'ativo' ? 'badge-green' : l.status === 'vendido' ? 'badge-blue' : 'badge-gray'}`}>{l.status}</span></td>
+                        <td style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(l.receita)}</td>
+                        <td style={{ color: '#dc3545' }}>{fmtMoeda(l.custo_total)}</td>
+                        <td style={{ fontWeight: 700, color: l.resultado >= 0 ? '#198754' : '#dc3545' }}>
+                          {l.resultado >= 0 ? '+' : ''}{fmtMoeda(l.resultado)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {relFin.custos_operacionais && (
             <div className="card" style={{ marginTop: 16 }}>
