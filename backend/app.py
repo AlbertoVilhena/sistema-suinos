@@ -17,9 +17,12 @@ app = Flask(__name__)
 
 # ============== CONFIGURATION ==============
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///suinocultura.db')
-# Fix for older Render PostgreSQL URLs
+# Fix for older Render PostgreSQL URLs (postgres:// → postgresql://)
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
+# Use psycopg3 driver (compatible with Python 3.14+)
+if database_url.startswith('postgresql://'):
+    database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
