@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -19,11 +19,14 @@ const navItems = [
 export default function Layout({ children, title }) {
   const { usuario, logout, isAdmin } = useAuth()
   const navigate = useNavigate()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleLogout = () => {
     logout()
     navigate('/login')
   }
+
+  const closeSidebar = () => setSidebarOpen(false)
 
   const initials = usuario?.nome
     ? usuario.nome.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
@@ -38,14 +41,20 @@ export default function Layout({ children, title }) {
 
   return (
     <div className="app-layout">
+      {/* Overlay mobile */}
+      {sidebarOpen && (
+        <div className="sidebar-overlay" onClick={closeSidebar} />
+      )}
+
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="sidebar-logo">
           <span className="logo-icon">🐖</span>
           <div>
             <div className="logo-text">GranjaApp</div>
             <div className="logo-sub">Gestão de Suinocultura</div>
           </div>
+          <button className="sidebar-close" onClick={closeSidebar}>✕</button>
         </div>
 
         <nav className="sidebar-nav">
@@ -59,6 +68,7 @@ export default function Layout({ children, title }) {
                   to={item.to}
                   end={item.to === '/'}
                   className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+                  onClick={closeSidebar}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   {item.label}
@@ -76,7 +86,12 @@ export default function Layout({ children, title }) {
       {/* Main */}
       <div className="main-content">
         <header className="header">
-          <div className="header-title">{title}</div>
+          <div className="header-left">
+            <button className="hamburger" onClick={() => setSidebarOpen(true)} aria-label="Menu">
+              <span /><span /><span />
+            </button>
+            <div className="header-title">{title}</div>
+          </div>
           <div className="header-right">
             <div className="header-user">
               <div className="avatar">{initials}</div>

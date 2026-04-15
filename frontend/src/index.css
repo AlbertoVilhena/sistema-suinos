@@ -816,15 +816,75 @@ textarea {
 }
 
 /* ===== RESPONSIVE ===== */
+/* ===== HAMBURGER / MOBILE NAV ===== */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-right: 8px;
+}
+.hamburger:hover { background: rgba(0,0,0,0.06); }
+.hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: 0.2s;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-close {
+  display: none;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 18px;
+  cursor: pointer;
+  margin-left: auto;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.sidebar-close:hover { color: #fff; background: rgba(255,255,255,0.1); }
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 99;
+}
+
 @media (max-width: 768px) {
+  .hamburger { display: flex; }
+  .sidebar-close { display: block; }
+  .sidebar-overlay { display: block; }
+
   .sidebar {
     transform: translateX(-100%);
+    z-index: 200;
   }
   .sidebar.open {
     transform: translateX(0);
   }
   .main-content {
     margin-left: 0;
+  }
+  .header {
+    padding: 0 12px;
+  }
+  .header-user .user-info {
+    display: none;
   }
   .form-grid {
     grid-template-columns: 1fr;
@@ -840,6 +900,28 @@ textarea {
   }
   .fin-summary {
     grid-template-columns: 1fr;
+  }
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .page-header .actions {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+  }
+  .page-header .actions .btn {
+    flex: 1;
+    text-align: center;
+  }
+  .table-container {
+    overflow-x: auto;
+  }
+  .modal-content {
+    width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
   }
 }
 
