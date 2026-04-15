@@ -53,12 +53,11 @@ export default function Dashboard() {
           <h1>Visão Geral</h1>
           <p>Resumo da sua granja em tempo real</p>
         </div>
-        <div>
-          <span style={{ fontSize: 13, color: '#6c757d' }}>
-            Saldo atual: <strong style={{ color: saldo >= 0 ? '#198754' : '#dc3545', fontSize: 16 }}>
-              {fmtMoeda(saldo)}
-            </strong>
-          </span>
+        <div className="dash-saldo-header">
+          <span style={{ fontSize: 12, color: '#6c757d' }}>Saldo atual</span>
+          <strong style={{ color: saldo >= 0 ? '#198754' : '#dc3545', fontSize: 15, display: 'block' }}>
+            {fmtMoeda(saldo)}
+          </strong>
         </div>
       </div>
 
@@ -66,7 +65,7 @@ export default function Dashboard() {
         {stats.map((s, i) => (
           <div className="stat-card" key={i}>
             <div className={`stat-icon ${s.cls}`}>{s.icon}</div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="stat-value">{s.value}</div>
               <div className="stat-label">{s.label}</div>
             </div>
@@ -81,59 +80,51 @@ export default function Dashboard() {
           {data?.lotes_recentes?.length === 0 ? (
             <p style={{ color: '#6c757d', marginTop: 12 }}>Nenhum lote cadastrado ainda.</p>
           ) : (
-            <table className="recent-table" style={{ marginTop: 12 }}>
-              <thead>
-                <tr>
-                  <th>Número</th>
-                  <th>Fase</th>
-                  <th>Qtd</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data?.lotes_recentes?.map(l => (
-                  <tr key={l.id}>
-                    <td data-label="Número"><strong>{l.numero}</strong></td>
-                    <td data-label="Fase">
-                      <span className={`badge ${faseBadge[l.fase] || 'badge-gray'}`}>
-                        {l.fase || '-'}
-                      </span>
-                    </td>
-                    <td data-label="Qtd">{l.quantidade_atual}</td>
-                    <td data-label="Status">
-                      <span className={`badge ${statusBadge[l.status] || 'badge-gray'}`}>
-                        {l.status}
-                      </span>
-                    </td>
+            <div className="table-container" style={{ marginTop: 12, border: 'none', boxShadow: 'none' }}>
+              <table className="recent-table">
+                <thead>
+                  <tr>
+                    <th>Número</th><th>Fase</th><th>Qtd</th><th>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data?.lotes_recentes?.map(l => (
+                    <tr key={l.id}>
+                      <td data-label="Número"><strong>{l.numero}</strong></td>
+                      <td data-label="Fase">
+                        <span className={`badge ${faseBadge[l.fase] || 'badge-gray'}`}>{l.fase || '-'}</span>
+                      </td>
+                      <td data-label="Qtd">{l.quantidade_atual}</td>
+                      <td data-label="Status">
+                        <span className={`badge ${statusBadge[l.status] || 'badge-gray'}`}>{l.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
         {/* Resumo financeiro */}
         <div className="card">
           <div className="card-title">💰 Resumo Financeiro</div>
-          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#6c757d', fontSize: 13 }}>📈 Total de Receitas</span>
-              <strong style={{ color: '#198754', fontSize: 15 }}>{fmtMoeda(data?.receitas)}</strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#6c757d', fontSize: 13 }}>📉 Total de Despesas</span>
-              <strong style={{ color: '#dc3545', fontSize: 15 }}>{fmtMoeda(data?.despesas)}</strong>
-            </div>
-            <div style={{ borderTop: '1px solid #dee2e6', paddingTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 600, fontSize: 14 }}>💼 Saldo</span>
-              <strong style={{ color: saldo >= 0 ? '#198754' : '#dc3545', fontSize: 18 }}>
-                {fmtMoeda(saldo)}
-              </strong>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#6c757d', fontSize: 13 }}>🌽 Ração (últimos 30 dias)</span>
-              <strong style={{ fontSize: 14 }}>{fmtMoeda(data?.custo_racao_30dias)}</strong>
-            </div>
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {[
+              { label: '📈 Receitas', value: fmtMoeda(data?.receitas), color: '#198754' },
+              { label: '📉 Despesas', value: fmtMoeda(data?.despesas), color: '#dc3545' },
+              { label: '💼 Saldo', value: fmtMoeda(saldo), color: saldo >= 0 ? '#198754' : '#dc3545', bold: true, border: true },
+              { label: '🌽 Ração (30 dias)', value: fmtMoeda(data?.custo_racao_30dias) },
+            ].map((row, i) => (
+              <div key={i} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                flexWrap: 'wrap', gap: 4,
+                ...(row.border ? { borderTop: '1px solid #dee2e6', paddingTop: 12 } : {})
+              }}>
+                <span style={{ color: '#6c757d', fontSize: 13 }}>{row.label}</span>
+                <strong style={{ color: row.color, fontSize: row.bold ? 16 : 14 }}>{row.value}</strong>
+              </div>
+            ))}
           </div>
         </div>
       </div>
