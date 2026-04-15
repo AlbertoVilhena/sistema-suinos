@@ -132,14 +132,14 @@ export default function Lotes() {
                 </td></tr>
               ) : filtered.map(l => (
                 <tr key={l.id}>
-                  <td><strong>{l.numero}</strong></td>
-                  <td>{fmtData(l.data_entrada)}</td>
-                  <td>{l.quantidade_inicial}</td>
-                  <td>{l.quantidade_atual}</td>
-                  <td>{l.peso_medio_entrada ? `${l.peso_medio_entrada} kg` : '-'}</td>
-                  <td><span className={`badge ${faseBadge[l.fase] || 'badge-gray'}`}>{l.fase || '-'}</span></td>
-                  <td><span className={`badge ${statusBadge[l.status] || 'badge-gray'}`}>{l.status}</span></td>
-                  <td>
+                  <td data-label="Número"><strong>{l.numero}</strong></td>
+                  <td data-label="Data Entrada">{fmtData(l.data_entrada)}</td>
+                  <td data-label="Qtd Inicial">{l.quantidade_inicial}</td>
+                  <td data-label="Qtd Atual">{l.quantidade_atual}</td>
+                  <td data-label="Peso Médio">{l.peso_medio_entrada ? `${l.peso_medio_entrada} kg` : '-'}</td>
+                  <td data-label="Fase"><span className={`badge ${faseBadge[l.fase] || 'badge-gray'}`}>{l.fase || '-'}</span></td>
+                  <td data-label="Status"><span className={`badge ${statusBadge[l.status] || 'badge-gray'}`}>{l.status}</span></td>
+                  <td data-label="">
                     <div className="actions">
                       {canEdit() && (
                         <button className="btn btn-outline btn-sm" onClick={() => openEdit(l)}>✏️ Editar</button>

@@ -110,15 +110,13 @@ export default function Sanidade() {
                 </td></tr>
               ) : filtered.map(v => (
                 <tr key={v.id}>
-                  <td>{fmtData(v.data)}</td>
-                  <td><strong>{v.vacina}</strong></td>
-                  <td>{v.lote_numero || '-'}</td>
-                  <td>{v.dose || '-'}</td>
-                  <td>{v.responsavel || '-'}</td>
-                  <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {v.observacoes || '-'}
-                  </td>
-                  <td>
+                  <td data-label="Data">{fmtData(v.data)}</td>
+                  <td data-label="Vacina/Med."><strong>{v.vacina}</strong></td>
+                  <td data-label="Lote">{v.lote_numero || '-'}</td>
+                  <td data-label="Dose">{v.dose || '-'}</td>
+                  <td data-label="Responsável">{v.responsavel || '-'}</td>
+                  <td data-label="Obs.">{v.observacoes || '-'}</td>
+                  <td data-label="">
                     <div className="actions">
                       {canWrite() && <button className="btn btn-outline btn-sm" onClick={() => openEdit(v)}>✏️</button>}
                       {canEdit() && <button className="btn btn-danger btn-sm" onClick={() => handleDelete(v)}>🗑️</button>}

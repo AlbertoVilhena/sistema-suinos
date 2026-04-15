@@ -136,15 +136,15 @@ export default function Animais() {
                 <tr><td colSpan={9} className="table-empty"><span className="empty-icon">🐷</span>Nenhum animal encontrado</td></tr>
               ) : filtered.map(a => (
                 <tr key={a.id}>
-                  <td><strong>{a.brinco || '-'}</strong></td>
-                  <td>{a.lote_numero || '-'}</td>
-                  <td><span className={`badge ${sexoBadge[a.sexo] || 'badge-gray'}`}>{a.sexo || '-'}</span></td>
-                  <td>{a.raca || '-'}</td>
-                  <td>{fmtData(a.data_nascimento)}</td>
-                  <td>{a.peso_entrada ? `${a.peso_entrada} kg` : '-'}</td>
-                  <td>{a.peso_atual ? `${a.peso_atual} kg` : '-'}</td>
-                  <td><span className={`badge ${statusBadge[a.status] || 'badge-gray'}`}>{a.status}</span></td>
-                  <td><div className="actions">
+                  <td data-label="Brinco"><strong>{a.brinco || '-'}</strong></td>
+                  <td data-label="Lote">{a.lote_numero || '-'}</td>
+                  <td data-label="Sexo"><span className={`badge ${sexoBadge[a.sexo] || 'badge-gray'}`}>{a.sexo || '-'}</span></td>
+                  <td data-label="Raça">{a.raca || '-'}</td>
+                  <td data-label="Nascimento">{fmtData(a.data_nascimento)}</td>
+                  <td data-label="Peso Entrada">{a.peso_entrada ? `${a.peso_entrada} kg` : '-'}</td>
+                  <td data-label="Peso Atual">{a.peso_atual ? `${a.peso_atual} kg` : '-'}</td>
+                  <td data-label="Status"><span className={`badge ${statusBadge[a.status] || 'badge-gray'}`}>{a.status}</span></td>
+                  <td data-label=""><div className="actions">
                     {canWrite() && <button className="btn btn-outline btn-sm" onClick={() => openEdit(a)}>✏️</button>}
                     {canEdit() && <button className="btn btn-danger btn-sm" onClick={() => handleDelete(a)}>🗑️</button>}
                   </div></td>

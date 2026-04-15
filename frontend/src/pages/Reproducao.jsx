@@ -175,15 +175,15 @@ export default function Reproducao() {
                 </td></tr>
               ) : filtered.map(r => (
                 <tr key={r.id}>
-                  <td><strong>{r.femea_brinco || '-'}</strong></td>
-                  <td>{r.macho_brinco || '-'}</td>
-                  <td>{r.lote_numero || '-'}</td>
-                  <td>{fmtData(r.data_cobertura)}</td>
-                  <td>{fmtData(r.data_parto_previsto)}</td>
-                  <td>{fmtData(r.data_parto_real)}</td>
-                  <td>{r.quantidade_nascidos != null ? `${r.quantidade_nascidos}/${r.quantidade_vivos ?? '?'}` : '-'}</td>
-                  <td><span className={`badge ${statusBadge[r.status] || 'badge-gray'}`}>{r.status}</span></td>
-                  <td>
+                  <td data-label="Fêmea"><strong>{r.femea_brinco || '-'}</strong></td>
+                  <td data-label="Macho">{r.macho_brinco || '-'}</td>
+                  <td data-label="Lote">{r.lote_numero || '-'}</td>
+                  <td data-label="Cobertura">{fmtData(r.data_cobertura)}</td>
+                  <td data-label="Parto Prev.">{fmtData(r.data_parto_previsto)}</td>
+                  <td data-label="Parto Real">{fmtData(r.data_parto_real)}</td>
+                  <td data-label="Nasc./Vivos">{r.quantidade_nascidos != null ? `${r.quantidade_nascidos}/${r.quantidade_vivos ?? '?'}` : '-'}</td>
+                  <td data-label="Status"><span className={`badge ${statusBadge[r.status] || 'badge-gray'}`}>{r.status}</span></td>
+                  <td data-label="">
                     <div className="actions">
                       {canWrite() && <button className="btn btn-outline btn-sm" onClick={() => openEdit(r)}>✏️</button>}
                       {canEdit() && <button className="btn btn-danger btn-sm" onClick={() => handleDelete(r)}>🗑️</button>}

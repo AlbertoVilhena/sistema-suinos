@@ -133,7 +133,7 @@ export default function Usuarios() {
                 </td></tr>
               ) : usuarios.map(u => (
                 <tr key={u.id}>
-                  <td>
+                  <td data-label="Nome">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div className="avatar" style={{ width: 28, height: 28, fontSize: 11 }}>
                         {u.nome.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
@@ -144,19 +144,19 @@ export default function Usuarios() {
                       )}
                     </div>
                   </td>
-                  <td>{u.email}</td>
-                  <td>
+                  <td data-label="E-mail">{u.email}</td>
+                  <td data-label="Perfil">
                     <span className={`badge ${roleLabel[u.role]?.badge || 'badge-gray'}`}>
                       {roleLabel[u.role]?.label || u.role}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Situação">
                     <span className={`badge ${u.ativo ? 'badge-green' : 'badge-red'}`}>
                       {u.ativo ? '✅ Ativo' : '❌ Inativo'}
                     </span>
                   </td>
-                  <td>{fmtData(u.criado_em)}</td>
-                  <td>
+                  <td data-label="Criado em">{fmtData(u.criado_em)}</td>
+                  <td data-label="">
                     <div className="actions">
                       <button className="btn btn-outline btn-sm" onClick={() => openEdit(u)}>✏️ Editar</button>
                       {u.ativo ? (

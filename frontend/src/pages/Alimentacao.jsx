@@ -124,17 +124,17 @@ export default function Alimentacao() {
                 <tr><td colSpan={8} className="table-empty"><span className="empty-icon">🌽</span>Nenhum registro de alimentação</td></tr>
               ) : filtered.map(a => (
                 <tr key={a.id}>
-                  <td>{fmtData(a.data)}</td>
-                  <td>{a.lote_numero || '-'}</td>
-                  <td>
+                  <td data-label="Data">{fmtData(a.data)}</td>
+                  <td data-label="Lote">{a.lote_numero || '-'}</td>
+                  <td data-label="Ração">
                     {a.formulacao_nome && <div style={{ fontSize: 11, color: '#0d6efd', fontWeight: 600 }}>🌾 {a.formulacao_nome}</div>}
                     {a.racao_tipo || '-'}
                   </td>
-                  <td>{a.quantidade_kg} kg</td>
-                  <td>{a.custo_unitario ? fmtMoeda(a.custo_unitario) : '-'}</td>
-                  <td><strong>{a.custo_total ? fmtMoeda(a.custo_total) : '-'}</strong></td>
-                  <td style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.observacoes || '-'}</td>
-                  <td>
+                  <td data-label="Quantidade">{a.quantidade_kg} kg</td>
+                  <td data-label="Custo/kg">{a.custo_unitario ? fmtMoeda(a.custo_unitario) : '-'}</td>
+                  <td data-label="Custo Total"><strong>{a.custo_total ? fmtMoeda(a.custo_total) : '-'}</strong></td>
+                  <td data-label="Obs.">{a.observacoes || '-'}</td>
+                  <td data-label="">
                     <div className="actions">
                       {canWrite() && <button className="btn btn-outline btn-sm" onClick={() => openEdit(a)}>✏️</button>}
                       {canEdit() && <button className="btn btn-danger btn-sm" onClick={() => handleDelete(a)}>🗑️</button>}

@@ -138,17 +138,17 @@ export default function Financeiro() {
                 <tr><td colSpan={7} className="table-empty"><span className="empty-icon">💰</span>Nenhum registro financeiro</td></tr>
               ) : filtered.map(r => (
                 <tr key={r.id}>
-                  <td>{fmtData(r.data)}</td>
-                  <td><span className={`badge ${r.tipo === 'receita' ? 'badge-green' : 'badge-red'}`}>
+                  <td data-label="Data">{fmtData(r.data)}</td>
+                  <td data-label="Tipo"><span className={`badge ${r.tipo === 'receita' ? 'badge-green' : 'badge-red'}`}>
                     {r.tipo === 'receita' ? 'Receita' : 'Despesa'}
                   </span></td>
-                  <td>{r.categoria || '-'}</td>
-                  <td>{r.descricao}</td>
-                  <td>{r.lote_numero || '-'}</td>
-                  <td><strong style={{ color: r.tipo === 'receita' ? '#198754' : '#dc3545' }}>
+                  <td data-label="Categoria">{r.categoria || '-'}</td>
+                  <td data-label="Descrição">{r.descricao}</td>
+                  <td data-label="Lote">{r.lote_numero || '-'}</td>
+                  <td data-label="Valor"><strong style={{ color: r.tipo === 'receita' ? '#198754' : '#dc3545' }}>
                     {r.tipo === 'receita' ? '+' : '-'}{fmtMoeda(r.valor)}
                   </strong></td>
-                  <td><div className="actions">
+                  <td data-label=""><div className="actions">
                     {canWrite() && <button className="btn btn-outline btn-sm" onClick={() => openEdit(r)}>✏️</button>}
                     {canEdit() && <button className="btn btn-danger btn-sm" onClick={() => handleDelete(r)}>🗑️</button>}
                   </div></td>

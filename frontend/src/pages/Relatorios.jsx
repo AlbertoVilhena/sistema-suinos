@@ -104,19 +104,19 @@ export default function Relatorios() {
                     ? <tr><td colSpan={13} className="table-empty">Nenhum lote cadastrado</td></tr>
                     : relLotes.map(l => (
                       <tr key={l.id}>
-                        <td><strong>{l.numero}</strong><div style={{ fontSize: 11, color: '#6c757d' }}>{fmtData(l.data_entrada)}</div></td>
-                        <td>{l.fase || '-'}</td>
-                        <td><span className={`badge ${l.status === 'ativo' ? 'badge-green' : l.status === 'vendido' ? 'badge-blue' : 'badge-gray'}`}>{l.status}</span></td>
-                        <td>{l.quantidade_inicial}</td>
-                        <td>{l.quantidade_atual}</td>
-                        <td style={{ color: l.taxa_mortalidade > 5 ? '#dc3545' : 'inherit' }}>{fmtNum(l.taxa_mortalidade)}%</td>
-                        <td>{fmtMoeda(l.custo_racao)}</td>
-                        <td>{fmtMoeda(l.custo_sanidade)}</td>
-                        <td>{fmtMoeda(l.custo_aquisicao_animais)}</td>
-                        <td style={{ fontWeight: 600 }}>{fmtMoeda(l.total_operacional)}</td>
-                        <td>{fmtMoeda(l.custo_por_animal)}</td>
-                        <td style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(l.receita_lote)}</td>
-                        <td style={{ fontWeight: 700, color: l.resultado_lote >= 0 ? '#198754' : '#dc3545' }}>
+                        <td data-label="Lote"><strong>{l.numero}</strong><div style={{ fontSize: 11, color: '#6c757d' }}>{fmtData(l.data_entrada)}</div></td>
+                        <td data-label="Fase">{l.fase || '-'}</td>
+                        <td data-label="Status"><span className={`badge ${l.status === 'ativo' ? 'badge-green' : l.status === 'vendido' ? 'badge-blue' : 'badge-gray'}`}>{l.status}</span></td>
+                        <td data-label="Qtd Inicial">{l.quantidade_inicial}</td>
+                        <td data-label="Qtd Atual">{l.quantidade_atual}</td>
+                        <td data-label="Mortalidade" style={{ color: l.taxa_mortalidade > 5 ? '#dc3545' : 'inherit' }}>{fmtNum(l.taxa_mortalidade)}%</td>
+                        <td data-label="Custo Ração">{fmtMoeda(l.custo_racao)}</td>
+                        <td data-label="Custo Sanidade">{fmtMoeda(l.custo_sanidade)}</td>
+                        <td data-label="Custo Aquisição">{fmtMoeda(l.custo_aquisicao_animais)}</td>
+                        <td data-label="Total Custos" style={{ fontWeight: 600 }}>{fmtMoeda(l.total_operacional)}</td>
+                        <td data-label="Custo/Animal">{fmtMoeda(l.custo_por_animal)}</td>
+                        <td data-label="Receita" style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(l.receita_lote)}</td>
+                        <td data-label="Resultado" style={{ fontWeight: 700, color: l.resultado_lote >= 0 ? '#198754' : '#dc3545' }}>
                           {l.resultado_lote >= 0 ? '+' : ''}{fmtMoeda(l.resultado_lote)}
                         </td>
                       </tr>
@@ -169,11 +169,11 @@ export default function Relatorios() {
                   <tbody>
                     {relFin.resultado_por_lote.map(l => (
                       <tr key={l.lote_id}>
-                        <td><strong>{l.lote_numero}</strong></td>
-                        <td><span className={`badge ${l.status === 'ativo' ? 'badge-green' : l.status === 'vendido' ? 'badge-blue' : 'badge-gray'}`}>{l.status}</span></td>
-                        <td style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(l.receita)}</td>
-                        <td style={{ color: '#dc3545' }}>{fmtMoeda(l.custo_total)}</td>
-                        <td style={{ fontWeight: 700, color: l.resultado >= 0 ? '#198754' : '#dc3545' }}>
+                        <td data-label="Lote"><strong>{l.lote_numero}</strong></td>
+                        <td data-label="Status"><span className={`badge ${l.status === 'ativo' ? 'badge-green' : l.status === 'vendido' ? 'badge-blue' : 'badge-gray'}`}>{l.status}</span></td>
+                        <td data-label="Receita" style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(l.receita)}</td>
+                        <td data-label="Custo Total" style={{ color: '#dc3545' }}>{fmtMoeda(l.custo_total)}</td>
+                        <td data-label="Resultado" style={{ fontWeight: 700, color: l.resultado >= 0 ? '#198754' : '#dc3545' }}>
                           {l.resultado >= 0 ? '+' : ''}{fmtMoeda(l.resultado)}
                         </td>
                       </tr>

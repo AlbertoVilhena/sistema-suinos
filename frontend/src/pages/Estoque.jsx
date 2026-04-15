@@ -121,20 +121,20 @@ export default function Estoque() {
                 <tr><td colSpan={8} className="table-empty"><span className="empty-icon">📦</span>Nenhum item no estoque</td></tr>
               ) : filtered.map(i => (
                 <tr key={i.id} style={i.abaixo_minimo && i.estoque_minimo > 0 ? { background: '#fff5f5' } : {}}>
-                  <td><strong>{i.nome}</strong>{i.observacoes && <div style={{ fontSize: 12, color: '#6c757d' }}>{i.observacoes}</div>}</td>
-                  <td><span className={`badge ${categoriaBadge[i.categoria] || 'badge-gray'}`}>{categoriaLabel[i.categoria] || i.categoria}</span></td>
-                  <td style={{ fontWeight: 600, color: i.abaixo_minimo && i.estoque_minimo > 0 ? '#dc3545' : 'inherit' }}>
+                  <td data-label="Nome"><strong>{i.nome}</strong>{i.observacoes && <div style={{ fontSize: 12, color: '#6c757d' }}>{i.observacoes}</div>}</td>
+                  <td data-label="Categoria"><span className={`badge ${categoriaBadge[i.categoria] || 'badge-gray'}`}>{categoriaLabel[i.categoria] || i.categoria}</span></td>
+                  <td data-label="Quantidade" style={{ fontWeight: 600, color: i.abaixo_minimo && i.estoque_minimo > 0 ? '#dc3545' : 'inherit' }}>
                     {Number(i.quantidade || 0).toFixed(2)} {i.unidade}
                   </td>
-                  <td>{fmtMoeda(i.custo_unitario)}/{i.unidade}</td>
-                  <td style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(i.custo_total)}</td>
-                  <td>{i.estoque_minimo > 0 ? `${Number(i.estoque_minimo).toFixed(2)} ${i.unidade}` : '-'}</td>
-                  <td>
+                  <td data-label="Custo Unit.">{fmtMoeda(i.custo_unitario)}/{i.unidade}</td>
+                  <td data-label="Valor Total" style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(i.custo_total)}</td>
+                  <td data-label="Est. Mínimo">{i.estoque_minimo > 0 ? `${Number(i.estoque_minimo).toFixed(2)} ${i.unidade}` : '-'}</td>
+                  <td data-label="Situação">
                     {i.estoque_minimo > 0
                       ? <span className={`badge ${i.abaixo_minimo ? 'badge-red' : 'badge-green'}`}>{i.abaixo_minimo ? '⚠️ Baixo' : '✅ OK'}</span>
                       : <span className="badge badge-gray">-</span>}
                   </td>
-                  <td>
+                  <td data-label="">
                     <div className="actions">
                       {canWrite() && <button className="btn btn-outline btn-sm" style={{ color: '#198754', borderColor: '#198754' }} onClick={() => openEntrada(i)}>+ Entrada</button>}
                       {canEdit() && <button className="btn btn-outline btn-sm" onClick={() => openEdit(i)}>✏️</button>}
