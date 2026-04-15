@@ -1015,6 +1015,147 @@ textarea {
   }
 }
 
+/* ===== RELATÓRIOS ===== */
+
+/* Lotes: mobile = cards, desktop = tabela */
+.rel-lotes-mobile { display: none; }
+.rel-lotes-desktop { display: block; }
+
+.rel-lote-card {
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.rel-lote-card-header {
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid #f0f2f1;
+}
+.rel-lote-resultado {
+  margin: 12px 14px;
+  padding: 10px 14px;
+  border-left: 4px solid;
+  border-radius: 6px;
+  background: #fafafa;
+}
+.rel-lote-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 14px 12px;
+}
+.rel-metric-box {
+  background: #f8f9fa;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.rel-metric-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+.rel-metric-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 3px;
+}
+.rel-expand-btn {
+  width: 100%;
+  padding: 9px;
+  background: #f8f9fa;
+  border: none;
+  border-top: 1px solid #f0f2f1;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+.rel-expand-btn:hover { background: #f0f4f2; }
+.rel-lote-details {
+  padding: 10px 14px;
+  background: #f8fffe;
+  border-top: 1px solid #f0f2f1;
+}
+.rel-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #f0f2f1;
+  color: var(--text-muted);
+}
+.rel-detail-row:last-child { border-bottom: none; }
+.rel-detail-row strong { color: var(--text); }
+
+/* Financeiro */
+.rel-fin-saldo {
+  border-left: 4px solid;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  margin-bottom: 14px;
+  text-align: center;
+}
+.rel-fin-saldo-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.rel-fin-saldo-value {
+  font-size: 26px;
+  font-weight: 800;
+  margin-top: 4px;
+}
+.rel-fin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.rel-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.rel-resultado-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rel-resultado-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rel-resultado-values {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .rel-lotes-mobile { display: block; }
+  .rel-lotes-desktop { display: none; }
+  .rel-charts-grid { grid-template-columns: 1fr; gap: 12px; }
+  .rel-fin-saldo-value { font-size: 22px; }
+  .rel-resultado-values { flex-direction: column; align-items: flex-end; gap: 2px; }
+  .rel-resultado-row { flex-direction: row; align-items: center; }
+}
+
 /* ===== PRINT / PDF STYLES ===== */
 @media print {
   /* Ocultar sidebar, header e elementos de UI */
