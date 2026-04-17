@@ -396,6 +396,9 @@ def can_edit(role):
 def is_admin(role):
     return role == 'admin'
 
+def can_gestao(role):
+    return role in ['admin', 'gerente']
+
 @app.errorhandler(Exception)
 def handle_exception(e):
     import traceback
@@ -910,6 +913,9 @@ def delete_alimentacao(aid):
 @app.route('/api/financeiro', methods=['GET'])
 @jwt_required()
 def get_financeiro():
+    u = get_current_user()
+    if not can_gestao(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
     tipo = request.args.get('tipo')
     lote_id = request.args.get('lote_id')
     q = Financeiro.query
@@ -924,7 +930,7 @@ def get_financeiro():
 @jwt_required()
 def create_financeiro():
     u = get_current_user()
-    if not can_write(u.role):
+    if not can_gestao(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
 
     data = request.get_json()
@@ -966,7 +972,7 @@ def create_financeiro():
 @jwt_required()
 def update_financeiro(fid):
     u = get_current_user()
-    if not can_write(u.role):
+    if not can_gestao(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
 
     fin = Financeiro.query.get_or_404(fid)
@@ -1077,6 +1083,9 @@ def delete_ingrediente(iid):
 @app.route('/api/formulacoes', methods=['GET'])
 @jwt_required()
 def get_formulacoes():
+    u = get_current_user()
+    if not can_gestao(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
     return jsonify([f.to_dict() for f in Formulacao.query.order_by(Formulacao.nome).all()])
 
 
@@ -1084,7 +1093,7 @@ def get_formulacoes():
 @jwt_required()
 def create_formulacao():
     u = get_current_user()
-    if not can_edit(u.role):
+    if not can_gestao(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
     data = request.get_json()
     if not data.get('nome'):
@@ -1117,7 +1126,7 @@ def create_formulacao():
 @jwt_required()
 def update_formulacao(fid):
     u = get_current_user()
-    if not can_edit(u.role):
+    if not can_gestao(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
     form = Formulacao.query.get_or_404(fid)
     data = request.get_json()
@@ -1147,7 +1156,7 @@ def update_formulacao(fid):
 @jwt_required()
 def delete_formulacao(fid):
     u = get_current_user()
-    if not can_edit(u.role):
+    if not can_gestao(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
     form = Formulacao.query.get_or_404(fid)
     db.session.delete(form)
@@ -1201,6 +1210,9 @@ def get_dashboard():
 @app.route('/api/relatorios/lotes', methods=['GET'])
 @jwt_required()
 def relatorio_lotes():
+    u = get_current_user()
+    if not can_gestao(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
     lotes = Lote.query.all()
     result = []
     for lote in lotes:
@@ -1241,6 +1253,9 @@ def relatorio_lotes():
 @app.route('/api/relatorios/financeiro', methods=['GET'])
 @jwt_required()
 def relatorio_financeiro():
+    u = get_current_user()
+    if not can_gestao(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
     total_rec = db.session.query(func.sum(Financeiro.valor)).filter_by(tipo='receita').scalar() or 0
     total_desp = db.session.query(func.sum(Financeiro.valor)).filter_by(tipo='despesa').scalar() or 0
 
@@ -1351,6 +1366,9 @@ def debug_lote():
 @app.route('/api/estoque', methods=['GET'])
 @jwt_required()
 def get_estoque():
+    u = get_current_user()
+    if not can_gestao(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
     items = Estoque.query.order_by(Estoque.categoria, Estoque.nome).all()
     return jsonify([i.to_dict() for i in items])
 
@@ -1358,7 +1376,7 @@ def get_estoque():
 @jwt_required()
 def create_estoque():
     u = get_current_user()
-    if not can_write(u.role):
+    if not can_gestao(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
     data = request.get_json()
     if not data.get('nome'):
@@ -1380,7 +1398,7 @@ def create_estoque():
 @jwt_required()
 def update_estoque(eid):
     u = get_current_user()
-    if not can_write(u.role):
+    if not can_gestao(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
     item = Estoque.query.get_or_404(eid)
     data = request.get_json()
@@ -1409,7 +1427,7 @@ def delete_estoque(eid):
 @jwt_required()
 def entrada_estoque(eid):
     u = get_current_user()
-    if not can_write(u.role):
+    if not can_gestao(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
     item = Estoque.query.get_or_404(eid)
     data = request.get_json()
@@ -1492,6 +1510,9 @@ if __name__ == '__main__':
 @jwt_required()
 def analise_venda():
     """Análise inteligente do momento ideal de venda por lote"""
+    u = get_current_user()
+    if not can_gestao(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
     lotes = Lote.query.filter_by(status='ativo').all()
     resultado = []
 

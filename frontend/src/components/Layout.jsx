@@ -9,15 +9,15 @@ const navItems = [
   { to: '/alimentacao', icon: '🌽', label: 'Alimentação' },
   { to: '/sanidade', icon: '💉', label: 'Sanidade' },
   { to: '/reproducao', icon: '🫀', label: 'Reprodução' },
-  { to: '/financeiro', icon: '💰', label: 'Financeiro', section: 'GESTÃO' },
-  { to: '/estoque', icon: '📦', label: 'Estoque' },
-  { to: '/formulacao', icon: '🌾', label: 'Formulação Ração' },
-  { to: '/relatorios', icon: '📈', label: 'Relatórios' },
+  { to: '/financeiro', icon: '💰', label: 'Financeiro', section: 'GESTÃO', gestaoOnly: true },
+  { to: '/estoque', icon: '📦', label: 'Estoque', gestaoOnly: true },
+  { to: '/formulacao', icon: '🌾', label: 'Formulação Ração', gestaoOnly: true },
+  { to: '/relatorios', icon: '📈', label: 'Relatórios', gestaoOnly: true },
   { to: '/usuarios', icon: '👥', label: 'Usuários', adminOnly: true },
 ]
 
 export default function Layout({ children, title }) {
-  const { usuario, logout, isAdmin } = useAuth()
+  const { usuario, logout, isAdmin, canGestao } = useAuth()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -60,6 +60,7 @@ export default function Layout({ children, title }) {
         <nav className="sidebar-nav">
           {navItems.map((item, i) => {
             if (item.adminOnly && !isAdmin()) return null
+            if (item.gestaoOnly && !canGestao()) return null
             const showSection = item.section && (i === 0 || navItems[i - 1]?.section !== item.section)
             return (
               <React.Fragment key={item.to}>
