@@ -224,31 +224,30 @@ export default function Formulacao() {
                 )}
               </div>
               {f.itens.length > 0 && (
-                <div style={{ marginTop: 12, borderTop: '1px solid #e9ecef', paddingTop: 12 }}>
-                  <table style={{ width: '100%', fontSize: 13 }}>
-                    <thead><tr>
-                      <th style={{ textAlign: 'left', padding: '4px 8px', color: '#6c757d' }}>Ingrediente</th>
-                      <th style={{ textAlign: 'right', padding: '4px 8px', color: '#6c757d' }}>%</th>
-                      <th style={{ textAlign: 'right', padding: '4px 8px', color: '#6c757d' }}>Custo/kg</th>
-                      <th style={{ textAlign: 'right', padding: '4px 8px', color: '#6c757d' }}>Custo proporcional</th>
-                      <th style={{ textAlign: 'right', padding: '4px 8px', color: '#6c757d' }}>Estoque</th>
-                    </tr></thead>
-                    <tbody>
-                      {f.itens.map(item => (
-                        <tr key={item.id}>
-                          <td style={{ padding: '4px 8px' }}>{item.ingrediente_nome}</td>
-                          <td style={{ textAlign: 'right', padding: '4px 8px' }}>{item.percentagem}%</td>
-                          <td style={{ textAlign: 'right', padding: '4px 8px' }}>{fmtMoeda2(item.custo_unitario)}</td>
-                          <td style={{ textAlign: 'right', padding: '4px 8px', color: '#198754' }}>{fmtMoeda(item.custo_proporcional)}</td>
-                          <td style={{ textAlign: 'right', padding: '4px 8px' }}>
-                            <span className={`badge ${item.estoque_disponivel > 0 ? 'badge-green' : 'badge-red'}`}>
-                              {item.estoque_disponivel} {item.ingrediente_unidade}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div style={{ marginTop: 12, borderTop: '1px solid #e9ecef', paddingTop: 8 }}>
+                  {/* Cabeçalho */}
+                  <div style={{ display: 'flex', gap: 8, padding: '4px 0 6px', borderBottom: '1px solid #f0f0f0' }}>
+                    <div style={{ flex: 1, fontSize: 10, fontWeight: 600, color: '#6c757d', textTransform: 'uppercase' }}>Ingrediente</div>
+                    <div style={{ width: 36, fontSize: 10, fontWeight: 600, color: '#6c757d', textAlign: 'right' }}>%</div>
+                    <div style={{ width: 72, fontSize: 10, fontWeight: 600, color: '#6c757d', textAlign: 'right' }}>Custo/kg</div>
+                    <div style={{ width: 72, fontSize: 10, fontWeight: 600, color: '#6c757d', textAlign: 'right' }}>Proporcional</div>
+                    <div style={{ width: 60, fontSize: 10, fontWeight: 600, color: '#6c757d', textAlign: 'right' }}>Estoque</div>
+                  </div>
+                  {/* Linhas */}
+                  {f.itens.map(item => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f8f9fa' }}>
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={item.ingrediente_nome}>{item.ingrediente_nome}</div>
+                      <div style={{ width: 36, fontSize: 13, textAlign: 'right', flexShrink: 0, color: '#495057' }}>{item.percentagem}%</div>
+                      <div style={{ width: 72, fontSize: 12, textAlign: 'right', flexShrink: 0 }}>{fmtMoeda2(item.custo_unitario)}</div>
+                      <div style={{ width: 72, fontSize: 12, textAlign: 'right', flexShrink: 0, color: '#198754', fontWeight: 600 }}>{fmtMoeda(item.custo_proporcional)}</div>
+                      <div style={{ width: 60, textAlign: 'right', flexShrink: 0 }}>
+                        <span className={`badge ${item.estoque_disponivel > 0 ? 'badge-green' : 'badge-red'}`} style={{ fontSize: 11 }}>
+                          {Number(item.estoque_disponivel).toFixed(0)}{item.ingrediente_unidade}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -398,19 +397,23 @@ export default function Formulacao() {
               {estoqueRacao.map(item => {
                 const existing = ingredientes.find(ing => ing.nome.toLowerCase() === item.nome.toLowerCase())
                 return (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                  <label key={item.id} htmlFor={`imp-${item.id}`}
+                    style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 0', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', width: '100%' }}>
                     <input type="checkbox" id={`imp-${item.id}`}
                       checked={!!selectedImport[item.id]}
                       onChange={e => setSelectedImport(s => ({ ...s, [item.id]: e.target.checked }))}
-                      style={{ marginTop: 3, flexShrink: 0 }} />
-                    <label htmlFor={`imp-${item.id}`} style={{ flex: 1, cursor: 'pointer', minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>{item.nome}</div>
-                      <div style={{ color: '#6c757d', fontSize: 12, marginTop: 2 }}>
-                        Estoque: {Number(item.quantidade).toFixed(2)} {item.unidade} · Custo: R$ {Number(item.custo_unitario).toFixed(4)}/{item.unidade}
+                      style={{ marginTop: 2, flexShrink: 0, width: 18, height: 18 }} />
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, wordBreak: 'break-word' }}>{item.nome}</div>
+                      <div style={{ color: '#6c757d', fontSize: 12, marginTop: 3 }}>
+                        📦 {Number(item.quantidade).toFixed(2)} {item.unidade}
                       </div>
-                      {existing && <span className="badge badge-blue" style={{ fontSize: 11, marginTop: 4, display: 'inline-block' }}>já existe — será atualizado</span>}
-                    </label>
-                  </div>
+                      <div style={{ color: '#495057', fontSize: 12 }}>
+                        💰 R$ {Number(item.custo_unitario).toFixed(4)}/{item.unidade}
+                      </div>
+                      {existing && <div style={{ marginTop: 4 }}><span className="badge badge-blue" style={{ fontSize: 11 }}>já existe — será atualizado</span></div>}
+                    </div>
+                  </label>
                 )
               })}
             </div>
