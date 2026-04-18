@@ -92,6 +92,7 @@ class Lote(db.Model):
     alimentacoes = db.relationship('Alimentacao', backref='lote', lazy=True, cascade='all, delete-orphan')
     reproducoes = db.relationship('Reproducao', backref='lote', lazy=True)
     financeiros = db.relationship('Financeiro', backref='lote', lazy=True)
+    pesagens = db.relationship('Pesagem', backref='lote', lazy=True, cascade='all, delete-orphan', order_by='Pesagem.data')
 
     def to_dict(self):
         return {
@@ -338,6 +339,28 @@ class FormulacaoItem(db.Model):
             'custo_proporcional': round((self.percentagem / 100) * (self.custo_unitario or 0), 4)
         }
 
+
+
+class Pesagem(db.Model):
+    __tablename__ = 'pesagens'
+    id = db.Column(db.Integer, primary_key=True)
+    lote_id = db.Column(db.Integer, db.ForeignKey('lotes.id'), nullable=False)
+    data = db.Column(db.Date, nullable=False)
+    peso_medio = db.Column(db.Float, nullable=False)
+    total_animais = db.Column(db.Integer)
+    observacoes = db.Column(db.Text)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'lote_id': self.lote_id,
+            'data': self.data.isoformat() if self.data else None,
+            'peso_medio': self.peso_medio,
+            'total_animais': self.total_animais,
+            'observacoes': self.observacoes,
+            'criado_em': self.criado_em.isoformat()
+        }
 
 
 class Estoque(db.Model):
@@ -1479,6 +1502,53 @@ def criar_animais_lote(lid):
     db.session.commit()
     return jsonify({'criados': len(animais_criados), 'brincos': animais_criados[:10]}), 201
 
+# ============== PESAGENS ==============
+
+@app.route('/api/pesagens', methods=['GET'])
+@jwt_required()
+def get_pesagens():
+    lote_id = request.args.get('lote_id')
+    q = Pesagem.query
+    if lote_id:
+        q = q.filter_by(lote_id=lote_id)
+    return jsonify([p.to_dict() for p in q.order_by(Pesagem.data.desc()).all()])
+
+@app.route('/api/pesagens', methods=['POST'])
+@jwt_required()
+def create_pesagem():
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    data = request.get_json()
+    if not data.get('lote_id') or not data.get('peso_medio') or not data.get('data'):
+        return jsonify({'error': 'lote_id, peso_medio e data são obrigatórios'}), 400
+    try:
+        data_obj = date.fromisoformat(data['data'])
+    except Exception:
+        return jsonify({'error': 'Data inválida'}), 400
+    p = Pesagem(
+        lote_id=int(data['lote_id']),
+        data=data_obj,
+        peso_medio=float(data['peso_medio']),
+        total_animais=to_int(data.get('total_animais')),
+        observacoes=data.get('observacoes')
+    )
+    db.session.add(p)
+    db.session.commit()
+    return jsonify(p.to_dict()), 201
+
+@app.route('/api/pesagens/<int:pid>', methods=['DELETE'])
+@jwt_required()
+def delete_pesagem(pid):
+    u = get_current_user()
+    if not can_edit(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    p = Pesagem.query.get_or_404(pid)
+    db.session.delete(p)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
 # ============== INIT ==============
 
 def init_db():
@@ -1525,16 +1595,32 @@ def analise_venda():
         if qtd == 0:
             continue
 
-        # Métricas de peso
-        pesos = [a.peso_atual for a in animais if a.peso_atual]
-        peso_medio = sum(pesos) / len(pesos) if pesos else 0
-
-        # Ganho de peso médio diário
         dias_producao = (date.today() - lote.data_entrada).days if lote.data_entrada else 0
+
+        # Usar pesagens do lote se disponíveis; caso contrário, peso_atual dos animais
+        pesagens_lote = sorted(lote.pesagens, key=lambda p: p.data)
+        tem_pesagens = len(pesagens_lote) >= 1
+
         pesos_entrada = [a.peso_entrada for a in animais if a.peso_entrada]
         peso_medio_entrada = sum(pesos_entrada) / len(pesos_entrada) if pesos_entrada else (lote.peso_medio_entrada or 0)
-        ganho_total = peso_medio - peso_medio_entrada
-        ganho_diario = round(ganho_total / max(dias_producao, 1), 3)
+
+        if tem_pesagens:
+            peso_medio = pesagens_lote[-1].peso_medio
+            if len(pesagens_lote) >= 2:
+                # Ganho calculado entre primeira e última pesagem
+                dias_entre = (pesagens_lote[-1].data - pesagens_lote[0].data).days
+                ganho_total = pesagens_lote[-1].peso_medio - pesagens_lote[0].peso_medio
+                ganho_diario = round(ganho_total / max(dias_entre, 1), 3)
+            else:
+                # Só uma pesagem: comparar com entrada
+                ganho_total = peso_medio - peso_medio_entrada
+                ganho_diario = round(ganho_total / max(dias_producao, 1), 3)
+        else:
+            # Sem pesagens: usar peso_atual dos animais individuais
+            pesos = [a.peso_atual for a in animais if a.peso_atual]
+            peso_medio = sum(pesos) / len(pesos) if pesos else 0
+            ganho_total = peso_medio - peso_medio_entrada
+            ganho_diario = round(ganho_total / max(dias_producao, 1), 3)
 
         # Custos
         custo_racao = sum((a.quantidade_kg or 0) * (a.custo_unitario or 0) for a in alimentacoes)
@@ -1546,42 +1632,56 @@ def analise_venda():
 
         # Peso alvo (terminação = 110-120 kg)
         peso_alvo = 115
-        dias_para_alvo = max(0, round((peso_alvo - peso_medio) / max(ganho_diario, 0.001))) if ganho_diario > 0 else 999
+        sem_dados_ganho = ganho_diario <= 0 or (not tem_pesagens and peso_medio == 0)
+        if sem_dados_ganho:
+            dias_para_alvo = -1
+            txt_estimativa = 'Registre pesagens periódicas para calcular o tempo estimado de abate.'
+        else:
+            dias_para_alvo = max(0, round((peso_alvo - peso_medio) / ganho_diario)) if peso_medio < peso_alvo else 0
+            txt_estimativa = f'~{dias_para_alvo} dias para atingir {peso_alvo} kg.' if dias_para_alvo > 0 else 'Peso de abate atingido!'
 
         # Preço mínimo para lucro (margem 20%)
         preco_minimo = round(custo_por_kg * 1.2, 2)
 
         # ===== LÓGICA DE RECOMENDAÇÃO =====
         alertas = []
+        if not tem_pesagens:
+            alertas.append('Nenhuma pesagem registrada. Registre o peso atual do lote para ativar análise de ganho de peso.')
 
         if peso_medio >= 110:
             recomendacao = 'VENDER AGORA'
             icone = '🟢'
             cor = '#198754'
             justificativa = f'Peso médio ({peso_medio:.1f} kg) atingiu o ponto ótimo de abate (>110 kg). Venda imediata maximiza retorno.'
-        elif peso_medio >= 95 and ganho_diario < 0.4:
+        elif peso_medio >= 95 and not sem_dados_ganho and ganho_diario < 0.4:
             recomendacao = 'VENDER EM BREVE'
             icone = '🟡'
             cor = '#ffc107'
             justificativa = f'Peso próximo do alvo ({peso_medio:.1f} kg) mas ganho diário baixo ({ganho_diario:.3f} kg/dia). Custo-benefício de esperar é baixo.'
-        elif peso_medio >= 85 and dias_para_alvo <= 30:
+        elif not sem_dados_ganho and peso_medio >= 85 and dias_para_alvo <= 30:
             recomendacao = f'AGUARDAR ~{dias_para_alvo} DIAS'
             icone = '🔵'
             cor = '#0d6efd'
             justificativa = f'Faltam ~{dias_para_alvo} dias para atingir {peso_alvo} kg. Ganho diário de {ganho_diario:.3f} kg/dia está adequado.'
-        elif peso_medio < 60:
+        elif peso_medio < 60 or peso_medio == 0:
             recomendacao = 'FASE INICIAL'
             icone = '⚪'
             cor = '#6c757d'
-            justificativa = f'Animais ainda em fase de crescimento ({peso_medio:.1f} kg). Estimativa: ~{dias_para_alvo} dias para peso de abate.'
+            justificativa = f'Animais em fase inicial ({peso_medio:.1f} kg). {txt_estimativa}'
         else:
-            recomendacao = f'AGUARDAR ~{dias_para_alvo} DIAS'
-            icone = '🔵'
-            cor = '#0d6efd'
-            justificativa = f'Em desenvolvimento ({peso_medio:.1f} kg). Previsão de abate em ~{dias_para_alvo} dias com ganho de {ganho_diario:.3f} kg/dia.'
+            if sem_dados_ganho:
+                recomendacao = 'SEM DADOS'
+                icone = '⚫'
+                cor = '#6c757d'
+                justificativa = f'Peso atual: {peso_medio:.1f} kg. {txt_estimativa}'
+            else:
+                recomendacao = f'AGUARDAR ~{dias_para_alvo} DIAS'
+                icone = '🔵'
+                cor = '#0d6efd'
+                justificativa = f'Em desenvolvimento ({peso_medio:.1f} kg). {txt_estimativa} Ganho: {ganho_diario:.3f} kg/dia.'
 
         # Alertas automáticos
-        if ganho_diario < 0.2 and peso_medio < 100:
+        if not sem_dados_ganho and ganho_diario < 0.2 and peso_medio < 100:
             alertas.append(f'Ganho diário baixo ({ganho_diario:.3f} kg/dia). Verificar alimentação e saúde do lote.')
         if custo_por_kg > 8:
             alertas.append(f'Custo por kg elevado (R$ {custo_por_kg:.2f}/kg). Revisar eficiência da ração.')
@@ -1598,7 +1698,9 @@ def analise_venda():
             'peso_medio_entrada': round(peso_medio_entrada, 2),
             'ganho_diario_medio': ganho_diario,
             'dias_em_producao': dias_producao,
-            'dias_para_peso_alvo': dias_para_alvo if dias_para_alvo < 900 else -1,
+            'dias_para_peso_alvo': dias_para_alvo,
+            'tem_pesagens': tem_pesagens,
+            'total_pesagens': len(pesagens_lote),
             'custo_total': round(custo_total, 2),
             'custo_por_kg': custo_por_kg,
             'preco_minimo_lucro': preco_minimo,

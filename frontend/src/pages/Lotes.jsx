@@ -5,6 +5,7 @@ import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
+const fmtNum = (v, d = 1) => Number(v || 0).toFixed(d)
 
 const faseBadge = { maternidade: 'badge-purple', creche: 'badge-blue', crescimento: 'badge-teal', terminacao: 'badge-yellow' }
 const statusBadge = { ativo: 'badge-green', encerrado: 'badge-gray', vendido: 'badge-blue' }
@@ -15,6 +16,8 @@ const emptyForm = {
   numero: '', data_entrada: today, quantidade_inicial: '', quantidade_atual: '',
   peso_medio_entrada: '', fase: 'creche', status: 'ativo', observacoes: ''
 }
+
+const emptyPesagem = { data: today, peso_medio: '', total_animais: '', observacoes: '' }
 
 export default function Lotes() {
   const { canEdit, canWrite, isAdmin } = useAuth()
@@ -27,6 +30,15 @@ export default function Lotes() {
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Pesagem state
+  const [showPesagemModal, setShowPesagemModal] = useState(false)
+  const [pesagemLote, setPesagemLote] = useState(null)
+  const [pesagens, setPesagens] = useState([])
+  const [pesagemForm, setPesagemForm] = useState(emptyPesagem)
+  const [pesagemError, setPesagemError] = useState('')
+  const [savingPesagem, setSavingPesagem] = useState(false)
+  const [loadingPesagens, setLoadingPesagens] = useState(false)
 
   const load = () => {
     api.get('/api/lotes').then(r => setLotes(r.data)).finally(() => setLoading(false))
@@ -41,6 +53,43 @@ export default function Lotes() {
     setError('')
     setShowModal(true)
   }
+
+  const openPesagem = async (l) => {
+    setPesagemLote(l)
+    setPesagemForm({ ...emptyPesagem, total_animais: l.quantidade_atual || '' })
+    setPesagemError('')
+    setLoadingPesagens(true)
+    setShowPesagemModal(true)
+    try {
+      const r = await api.get(`/api/pesagens?lote_id=${l.id}`)
+      setPesagens(r.data)
+    } catch { setPesagens([]) } finally { setLoadingPesagens(false) }
+  }
+
+  const handleSavePesagem = async () => {
+    setPesagemError('')
+    if (!pesagemForm.peso_medio) { setPesagemError('Peso médio é obrigatório'); return }
+    setSavingPesagem(true)
+    try {
+      await api.post('/api/pesagens', { ...pesagemForm, lote_id: pesagemLote.id })
+      setPesagemForm({ ...emptyPesagem, total_animais: pesagemLote.quantidade_atual || '' })
+      const r = await api.get(`/api/pesagens?lote_id=${pesagemLote.id}`)
+      setPesagens(r.data)
+    } catch (e) {
+      setPesagemError(e.response?.data?.error || 'Erro ao salvar')
+    } finally { setSavingPesagem(false) }
+  }
+
+  const handleDeletePesagem = async (pid) => {
+    if (!window.confirm('Excluir esta pesagem?')) return
+    try {
+      await api.delete(`/api/pesagens/${pid}`)
+      const r = await api.get(`/api/pesagens?lote_id=${pesagemLote.id}`)
+      setPesagens(r.data)
+    } catch (e) { alert(e.response?.data?.error || 'Erro') }
+  }
+
+  const setP = (k, v) => setPesagemForm(f => ({ ...f, [k]: v }))
 
   const handleSave = async () => {
     setError('')
@@ -141,8 +190,11 @@ export default function Lotes() {
                   <td data-label="Status"><span className={`badge ${statusBadge[l.status] || 'badge-gray'}`}>{l.status}</span></td>
                   <td data-label="">
                     <div className="actions">
+                      {canWrite() && l.status === 'ativo' && (
+                        <button className="btn btn-outline btn-sm" onClick={() => openPesagem(l)} title="Registrar Pesagem">⚖️</button>
+                      )}
                       {canEdit() && (
-                        <button className="btn btn-outline btn-sm" onClick={() => openEdit(l)}>✏️ Editar</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => openEdit(l)}>✏️</button>
                       )}
                       {isAdmin() && (
                         <button className="btn btn-danger btn-sm" onClick={() => handleDelete(l)}>🗑️</button>
@@ -155,6 +207,75 @@ export default function Lotes() {
           </table>
         )}
       </div>
+
+      {showPesagemModal && pesagemLote && (
+        <Modal
+          title={`⚖️ Pesagens — Lote ${pesagemLote.numero}`}
+          onClose={() => setShowPesagemModal(false)}
+          onSave={handleSavePesagem}
+          saving={savingPesagem}
+          saveLabel="Registrar Pesagem"
+        >
+          {pesagemError && <div className="error-msg">{pesagemError}</div>}
+
+          {/* Formulário nova pesagem */}
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Data *</label>
+              <input type="date" value={pesagemForm.data} onChange={e => setP('data', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Peso Médio (kg) *</label>
+              <input type="number" step="0.1" min="0" value={pesagemForm.peso_medio}
+                onChange={e => setP('peso_medio', e.target.value)} placeholder="Ex: 45.5" />
+            </div>
+            <div className="form-group">
+              <label>Total de Animais</label>
+              <input type="number" min="0" value={pesagemForm.total_animais}
+                onChange={e => setP('total_animais', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Observações</label>
+              <input value={pesagemForm.observacoes} onChange={e => setP('observacoes', e.target.value)}
+                placeholder="Opcional..." />
+            </div>
+          </div>
+
+          {/* Histórico de pesagens */}
+          <div style={{ marginTop: 20, borderTop: '1px solid #e9ecef', paddingTop: 16 }}>
+            <strong style={{ fontSize: 13, color: '#495057' }}>📋 Histórico de Pesagens</strong>
+            {loadingPesagens ? (
+              <div style={{ textAlign: 'center', padding: 16, color: '#6c757d' }}>Carregando...</div>
+            ) : pesagens.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 16, color: '#6c757d', fontSize: 13 }}>
+                Nenhuma pesagem registrada ainda.
+              </div>
+            ) : (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {pesagens.map((p, i) => {
+                  const prev = pesagens[i + 1]
+                  const ganho = prev ? ((p.peso_medio - prev.peso_medio) / Math.max((new Date(p.data) - new Date(prev.data)) / 86400000, 1)) : null
+                  return (
+                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#f8f9fa', borderRadius: 6 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{fmtData(p.data)} — <span style={{ color: '#198754' }}>{fmtNum(p.peso_medio, 1)} kg</span></div>
+                        <div style={{ fontSize: 11, color: '#6c757d' }}>
+                          {p.total_animais ? `${p.total_animais} animais` : ''}
+                          {ganho !== null ? ` · +${fmtNum(ganho, 3)} kg/dia` : ''}
+                          {p.observacoes ? ` · ${p.observacoes}` : ''}
+                        </div>
+                      </div>
+                      {canEdit() && (
+                        <button className="btn btn-danger btn-sm" onClick={() => handleDeletePesagem(p.id)}>🗑️</button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
 
       {showModal && (
         <Modal

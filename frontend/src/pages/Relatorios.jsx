@@ -166,8 +166,8 @@ export default function Relatorios() {
           <div className="rel-lotes-desktop card" style={{ marginBottom: 16 }}>
             <div className="card-title">📋 Detalhes por Lote</div>
             <div style={{ overflowX: 'auto', marginTop: 12 }}>
-              <table>
-                <thead><tr>
+              <table style={{ fontSize: 12 }}>
+                <thead><tr style={{ whiteSpace: 'nowrap' }}>
                   <th>Lote</th><th>Fase</th><th>Status</th><th>Qtd Ini.</th><th>Qtd Atual</th>
                   <th>Mortalidade</th><th>Custo Ração</th><th>Custo Sanidade</th><th>Custo Aquisição</th>
                   <th>Total Custos</th><th>Custo/Animal</th><th>Receita</th><th>Resultado</th>
@@ -330,7 +330,7 @@ export default function Relatorios() {
                   { label: 'Custo total', value: fmtMoeda(l.custo_total) },
                   { label: 'Custo/kg', value: `${fmtMoeda(l.custo_por_kg)}/kg` },
                   { label: 'Preço mín.', value: `${fmtMoeda(l.preco_minimo_lucro)}/kg` },
-                  { label: 'Dias p/ alvo', value: l.dias_para_peso_alvo > 0 ? `${l.dias_para_peso_alvo}d` : '✅ atingido' },
+                  { label: 'Dias p/ alvo', value: l.dias_para_peso_alvo > 0 ? `~${l.dias_para_peso_alvo}d` : l.dias_para_peso_alvo === 0 ? '✅ atingido' : '—' },
                 ].map((m, i) => (
                   <div key={i} style={{ background: '#f8f9fa', borderRadius: 6, padding: '8px 10px' }}>
                     <div style={{ fontSize: 10, color: '#6c757d', textTransform: 'uppercase', fontWeight: 600 }}>{m.label}</div>

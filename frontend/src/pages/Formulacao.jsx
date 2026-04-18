@@ -398,16 +398,17 @@ export default function Formulacao() {
               {estoqueRacao.map(item => {
                 const existing = ingredientes.find(ing => ing.nome.toLowerCase() === item.nome.toLowerCase())
                 return (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
                     <input type="checkbox" id={`imp-${item.id}`}
                       checked={!!selectedImport[item.id]}
-                      onChange={e => setSelectedImport(s => ({ ...s, [item.id]: e.target.checked }))} />
-                    <label htmlFor={`imp-${item.id}`} style={{ flex: 1, cursor: 'pointer' }}>
-                      <strong>{item.nome}</strong>
-                      <span style={{ color: '#6c757d', fontSize: 12, marginLeft: 8 }}>
-                        {Number(item.quantidade).toFixed(2)} {item.unidade} — R$ {item.custo_unitario}/{item.unidade}
-                      </span>
-                      {existing && <span className="badge badge-blue" style={{ marginLeft: 8, fontSize: 11 }}>ja existe — sera atualizado</span>}
+                      onChange={e => setSelectedImport(s => ({ ...s, [item.id]: e.target.checked }))}
+                      style={{ marginTop: 3, flexShrink: 0 }} />
+                    <label htmlFor={`imp-${item.id}`} style={{ flex: 1, cursor: 'pointer', minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{item.nome}</div>
+                      <div style={{ color: '#6c757d', fontSize: 12, marginTop: 2 }}>
+                        Estoque: {Number(item.quantidade).toFixed(2)} {item.unidade} · Custo: R$ {Number(item.custo_unitario).toFixed(4)}/{item.unidade}
+                      </div>
+                      {existing && <span className="badge badge-blue" style={{ fontSize: 11, marginTop: 4, display: 'inline-block' }}>já existe — será atualizado</span>}
                     </label>
                   </div>
                 )
