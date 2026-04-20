@@ -15,12 +15,13 @@ import Formulacao from './pages/Formulacao'
 import Usuarios from './pages/Usuarios'
 import Estoque from './pages/Estoque'
 
-function ProtectedRoute({ children, adminOnly = false, gestaoOnly = false }) {
+function ProtectedRoute({ children, adminOnly = false, gestaoOnly = false, noDashboard = false }) {
   const { usuario, loading } = useAuth()
   if (loading) return <div className="loading"><div className="spinner"></div> Carregando...</div>
   if (!usuario) return <Navigate to="/login" replace />
   if (adminOnly && usuario.role !== 'admin') return <Navigate to="/" replace />
   if (gestaoOnly && !['admin', 'gerente'].includes(usuario.role)) return <Navigate to="/" replace />
+  if (noDashboard && usuario.role === 'operador') return <Navigate to="/lotes" replace />
   return children
 }
 
@@ -31,7 +32,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={usuario ? <Navigate to="/" replace /> : <Login />} />
-      <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/" element={<ProtectedRoute noDashboard><Dashboard /></ProtectedRoute>} />
       <Route path="/lotes" element={<ProtectedRoute><Lotes /></ProtectedRoute>} />
       <Route path="/animais" element={<ProtectedRoute><Animais /></ProtectedRoute>} />
       <Route path="/sanidade" element={<ProtectedRoute><Sanidade /></ProtectedRoute>} />
@@ -42,7 +43,11 @@ function AppRoutes() {
       <Route path="/formulacao" element={<ProtectedRoute gestaoOnly><Formulacao /></ProtectedRoute>} />
       <Route path="/estoque" element={<ProtectedRoute gestaoOnly><Estoque /></ProtectedRoute>} />
       <Route path="/usuarios" element={<ProtectedRoute adminOnly><Usuarios /></ProtectedRoute>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={
+        usuario?.role === 'operador'
+          ? <Navigate to="/lotes" replace />
+          : <Navigate to="/" replace />
+      } />
     </Routes>
   )
 }

@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const navItems = [
-  { to: '/', icon: '📊', label: 'Dashboard', section: 'GERAL' },
+  { to: '/', icon: '📊', label: 'Dashboard', section: 'GERAL', noDashboard: true },
   { to: '/lotes', icon: '🐖', label: 'Lotes', section: 'PRODUÇÃO' },
   { to: '/animais', icon: '🐷', label: 'Animais' },
   { to: '/alimentacao', icon: '🌽', label: 'Alimentação' },
@@ -61,6 +61,7 @@ export default function Layout({ children, title }) {
           {navItems.map((item, i) => {
             if (item.adminOnly && !isAdmin()) return null
             if (item.gestaoOnly && !canGestao()) return null
+            if (item.noDashboard && usuario?.role === 'operador') return null
             const showSection = item.section && (i === 0 || navItems[i - 1]?.section !== item.section)
             return (
               <React.Fragment key={item.to}>

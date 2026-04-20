@@ -14,8 +14,8 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      await login(form.email, form.senha)
-      navigate('/')
+      const user = await login(form.email, form.senha)
+      navigate(user.role === 'operador' ? '/lotes' : '/')
     } catch (err) {
       setError(err.response?.data?.error || 'Erro ao fazer login. Verifique suas credenciais.')
     } finally {
