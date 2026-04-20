@@ -20,7 +20,7 @@ const roleDescricao = {
   visualizador: 'Apenas visualização — sem permissão de escrita'
 }
 
-const emptyForm = { nome: '', email: '', senha: '', role: 'operador', ativo: true }
+const emptyForm = { nome: '', email: '', senha: '', confirmarSenha: '', role: 'operador', ativo: true }
 
 export default function Usuarios() {
   const { usuario: currentUser } = useAuth()
@@ -41,7 +41,7 @@ export default function Usuarios() {
   const openCreate = () => { setEditing(null); setForm(emptyForm); setError(''); setShowModal(true) }
   const openEdit = (u) => {
     setEditing(u)
-    setForm({ nome: u.nome, email: u.email, senha: '', role: u.role, ativo: u.ativo })
+    setForm({ nome: u.nome, email: u.email, senha: '', confirmarSenha: '', role: u.role, ativo: u.ativo })
     setError('')
     setShowModal(true)
   }
@@ -50,12 +50,16 @@ export default function Usuarios() {
     setError('')
     if (!form.nome || !form.email) { setError('Nome e email são obrigatórios'); return }
     if (!editing && !form.senha) { setError('Senha é obrigatória para novos usuários'); return }
+    if (form.senha && form.senha !== form.confirmarSenha) { setError('As senhas não coincidem'); return }
+    if (form.senha && form.senha.length < 6) { setError('A senha deve ter pelo menos 6 caracteres'); return }
     setSaving(true)
     try {
+      const payload = { ...form }
+      delete payload.confirmarSenha
       if (editing) {
-        await api.put(`/api/usuarios/${editing.id}`, form)
+        await api.put(`/api/usuarios/${editing.id}`, payload)
       } else {
-        await api.post('/api/usuarios', form)
+        await api.post('/api/usuarios', payload)
       }
       setShowModal(false)
       load()
@@ -197,10 +201,19 @@ export default function Usuarios() {
               <input type="email" value={form.email} onChange={e => set('email', e.target.value)}
                 placeholder="email@exemplo.com" />
             </div>
-            <div className="form-group span-2">
+            <div className="form-group">
               <label>{editing ? 'Nova Senha (deixe vazio para manter)' : 'Senha *'}</label>
               <input type="password" value={form.senha} onChange={e => set('senha', e.target.value)}
                 placeholder={editing ? '(manter senha atual)' : 'Mínimo 6 caracteres'} />
+            </div>
+            <div className="form-group">
+              <label>{editing ? 'Confirmar Nova Senha' : 'Confirmar Senha *'}</label>
+              <input type="password" value={form.confirmarSenha} onChange={e => set('confirmarSenha', e.target.value)}
+                placeholder="Repita a senha"
+                style={form.confirmarSenha && form.senha !== form.confirmarSenha ? { borderColor: '#dc3545' } : {}} />
+              {form.confirmarSenha && form.senha !== form.confirmarSenha && (
+                <span style={{ fontSize: 11, color: '#dc3545', marginTop: 4, display: 'block' }}>As senhas não coincidem</span>
+              )}
             </div>
             <div className="form-group">
               <label>Perfil de Acesso *</label>

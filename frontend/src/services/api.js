@@ -23,7 +23,9 @@ api.interceptors.response.use(
     const status = error.response?.status
     const msg = error.response?.data?.msg || error.response?.data?.error || ''
     const isJwtError = status === 422 && (msg.includes('string') || msg.includes('token') || msg.includes('Subject'))
-    if (status === 401 || isJwtError) {
+    // Não redirecionar se for o próprio endpoint de login (senão o erro nunca aparece na tela)
+    const isLoginEndpoint = error.config?.url?.includes('/auth/login')
+    if (!isLoginEndpoint && (status === 401 || isJwtError)) {
       localStorage.removeItem('token')
       localStorage.removeItem('usuario')
       window.location.href = '/login'
