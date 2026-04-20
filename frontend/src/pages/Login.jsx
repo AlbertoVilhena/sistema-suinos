@@ -61,9 +61,6 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="login-hint">
-          Primeiro acesso: <strong>admin@granja.com</strong> / <strong>admin123</strong>
-        </div>
       </div>
     </div>
   )
