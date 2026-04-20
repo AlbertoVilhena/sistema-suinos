@@ -26,6 +26,15 @@ if database_url.startswith('postgresql://'):
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# pool_pre_ping: verifica se a conexão está viva antes de usar (resolve SSL closed unexpectedly do Neon)
+# pool_recycle: descarta conexões com mais de 4 min (Neon fecha idle após ~5 min)
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 240,
+    'pool_size': 5,
+    'max_overflow': 5,
+    'pool_timeout': 30,
+}
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'suinocultura-secret-2024-mude-em-producao')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 
