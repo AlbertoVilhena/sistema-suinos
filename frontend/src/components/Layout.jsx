@@ -4,12 +4,12 @@ import { useAuth } from '../context/AuthContext'
 
 const navItems = [
   { to: '/', icon: '📊', label: 'Dashboard', section: 'GERAL', noDashboard: true },
-  { to: '/lotes', icon: '🐖', label: 'Lotes', section: 'PRODUÇÃO' },
+  { to: '/alimentacao', icon: '🌽', label: 'Alimentação', section: 'PRODUÇÃO' },
+  { to: '/lotes', icon: '🐖', label: 'Lotes' },
   { to: '/animais', icon: '🐷', label: 'Animais' },
   { to: '/plantel', icon: '🐗', label: 'Plantel Reprodutivo' },
-  { to: '/alimentacao', icon: '🌽', label: 'Alimentação' },
-  { to: '/sanidade', icon: '💉', label: 'Sanidade' },
   { to: '/reproducao', icon: '🫀', label: 'Reprodução' },
+  { to: '/sanidade', icon: '💉', label: 'Sanidade' },
   { to: '/financeiro', icon: '💰', label: 'Financeiro', section: 'GESTÃO', gestaoOnly: true },
   { to: '/estoque', icon: '📦', label: 'Estoque', gestaoOnly: true },
   { to: '/formulacao', icon: '🌾', label: 'Formulação Ração', gestaoOnly: true },
