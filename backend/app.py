@@ -1694,6 +1694,18 @@ def delete_pesagem(pid):
 def init_db():
     with app.app_context():
         db.create_all()
+        # Migrations: adiciona colunas novas em tabelas existentes (idempotente)
+        migrations = [
+            "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_grupo VARCHAR(20)",
+            "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS plantel_brinco VARCHAR(50)",
+        ]
+        for sql in migrations:
+            try:
+                db.session.execute(db.text(sql))
+            except Exception as e:
+                print(f'Migration skip: {e}')
+        db.session.commit()
+
         if Usuario.query.count() == 0:
             admin = Usuario(
                 nome='Administrador',
