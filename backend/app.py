@@ -1255,6 +1255,56 @@ def delete_formulacao(fid):
     return jsonify({'message': 'Formulação excluída'})
 
 
+@app.route('/api/formulacoes/<int:fid>/produzir', methods=['POST'])
+@jwt_required()
+def produzir_formulacao(fid):
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+
+    formulacao = Formulacao.query.get_or_404(fid)
+    data = request.get_json()
+
+    quantidade_kg = to_float(data.get('quantidade_kg'))
+    if not quantidade_kg or quantidade_kg <= 0:
+        return jsonify({'error': 'Quantidade inválida'}), 400
+    if not data.get('data'):
+        return jsonify({'error': 'Data é obrigatória'}), 400
+    if not data.get('lote_id') and not data.get('plantel_grupo'):
+        return jsonify({'error': 'Selecione um lote ou grupo do plantel'}), 400
+
+    # Calcula custo/kg com preços atuais dos ingredientes
+    custo_atual_por_kg = 0
+    for item in formulacao.itens:
+        ing = Ingrediente.query.get(item.ingrediente_id)
+        if ing:
+            custo_atual_por_kg += (item.percentagem / 100) * (ing.custo_por_kg or 0)
+
+    # Cria registro de Alimentação
+    alim = Alimentacao(
+        lote_id=to_int(data.get('lote_id')),
+        plantel_grupo=data.get('plantel_grupo') or None,
+        formulacao_id=fid,
+        data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
+        racao_tipo=formulacao.nome,
+        quantidade_kg=quantidade_kg,
+        custo_unitario=round(custo_atual_por_kg, 4),
+        observacoes=data.get('observacoes') or f'Produção via formulação: {formulacao.nome}'
+    )
+    db.session.add(alim)
+
+    # Deduz estoque de ingredientes se solicitado
+    if data.get('deduzir_estoque'):
+        for item in formulacao.itens:
+            ing = Ingrediente.query.get(item.ingrediente_id)
+            if ing:
+                qty_necessaria = quantidade_kg * (item.percentagem / 100)
+                ing.estoque_kg = max(0, (ing.estoque_kg or 0) - qty_necessaria)
+
+    db.session.commit()
+    return jsonify(alim.to_dict()), 201
+
+
 # ============== DASHBOARD ==============
 
 @app.route('/api/dashboard', methods=['GET'])

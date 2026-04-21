@@ -8,7 +8,9 @@ const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFr
 const fmtMoeda2 = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 
 const faseBadge = { maternidade: 'badge-purple', creche: 'badge-blue', crescimento: 'badge-teal', terminacao: 'badge-yellow' }
+const plantelGrupoLabel = { matrizes: '🐷 Matrizes', reprodutores: '🐗 Reprodutores', geral: '🐖 Plantel Geral' }
 
+const today = new Date().toISOString().split('T')[0]
 const emptyForm = { nome: '', descricao: '', fase: '', ativa: true }
 const emptyIng = { nome: '', unidade: 'kg', estoque_kg: '', custo_por_kg: '' }
 
@@ -32,6 +34,14 @@ export default function Formulacao() {
   const [savingIng, setSavingIng] = useState(false)
 
   const [loading, setLoading] = useState(true)
+  const [lotes, setLotes] = useState([])
+
+  // Produção
+  const [showProducaoModal, setShowProducaoModal] = useState(false)
+  const [producaoTarget, setProducaoTarget] = useState(null)
+  const [producaoForm, setProducaoForm] = useState({ destino_tipo: 'lote', lote_id: '', plantel_grupo: '', quantidade_kg: '', data: today, deduzir_estoque: true, observacoes: '' })
+  const [savingProducao, setSavingProducao] = useState(false)
+  const [producaoError, setProducaoError] = useState('')
 
   // Estoque import
   const [showImportModal, setShowImportModal] = useState(false)
@@ -40,8 +50,8 @@ export default function Formulacao() {
   const [importando, setImportando] = useState(false)
 
   const load = () => {
-    Promise.all([api.get('/api/formulacoes'), api.get('/api/ingredientes')])
-      .then(([rf, ri]) => { setFormulacoes(rf.data); setIngredientes(ri.data) })
+    Promise.all([api.get('/api/formulacoes'), api.get('/api/ingredientes'), api.get('/api/lotes')])
+      .then(([rf, ri, rl]) => { setFormulacoes(rf.data); setIngredientes(ri.data); setLotes(rl.data) })
       .finally(() => setLoading(false))
   }
 
@@ -156,6 +166,30 @@ export default function Formulacao() {
     } finally { setImportando(false) }
   }
 
+  const openProducao = (f) => {
+    setProducaoTarget(f)
+    setProducaoForm({ destino_tipo: 'lote', lote_id: '', plantel_grupo: '', quantidade_kg: '', data: today, deduzir_estoque: true, observacoes: '' })
+    setProducaoError('')
+    setShowProducaoModal(true)
+  }
+
+  const handleProduzir = async () => {
+    setProducaoError('')
+    setSavingProducao(true)
+    try {
+      const payload = { ...producaoForm }
+      if (payload.destino_tipo === 'plantel') { payload.lote_id = '' } else { payload.plantel_grupo = '' }
+      delete payload.destino_tipo
+      await api.post(`/api/formulacoes/${producaoTarget.id}/produzir`, payload)
+      setShowProducaoModal(false)
+      load()
+      alert(`✅ Produção registrada em Alimentação!\n${producaoForm.quantidade_kg} kg de "${producaoTarget.nome}"`)
+    } catch (e) {
+      setProducaoError(e.response?.data?.error || 'Erro ao registrar produção')
+    } finally { setSavingProducao(false) }
+  }
+
+  const setPF = (k, v) => setProducaoForm(f => ({ ...f, [k]: v }))
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const setI = (k, v) => setIngForm(f => ({ ...f, [k]: v }))
 
@@ -216,12 +250,11 @@ export default function Formulacao() {
                     </div>
                   </div>
                 </div>
-                {canEdit() && (
-                  <div className="actions">
-                    <button className="btn btn-outline btn-sm" onClick={() => openEditForm(f)}>Editar</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDeleteForm(f)}>🗑️</button>
-                  </div>
-                )}
+                <div className="actions">
+                  <button className="btn btn-primary btn-sm" onClick={() => openProducao(f)}>🔄 Produzir</button>
+                  {canEdit() && <button className="btn btn-outline btn-sm" onClick={() => openEditForm(f)}>Editar</button>}
+                  {canEdit() && <button className="btn btn-danger btn-sm" onClick={() => handleDeleteForm(f)}>🗑️</button>}
+                </div>
               </div>
               {f.itens.length > 0 && (
                 <div style={{ marginTop: 12, borderTop: '1px solid #e9ecef', paddingTop: 8 }}>
@@ -376,6 +409,148 @@ export default function Formulacao() {
           </div>
         </Modal>
       )}
+
+      {showProducaoModal && producaoTarget && (() => {
+        // Calcula custo atual e variações por ingrediente
+        const itensComPrecos = producaoTarget.itens.map(item => {
+          const ing = ingredientes.find(i => i.id === item.ingrediente_id)
+          const custoAtual = ing?.custo_por_kg || 0
+          const custoSalvo = item.custo_unitario || 0
+          const diff = custoAtual - custoSalvo
+          const propAtual = (item.percentagem / 100) * custoAtual
+          const qtdNecessaria = producaoForm.quantidade_kg ? (parseFloat(producaoForm.quantidade_kg) * item.percentagem / 100) : null
+          return { ...item, custoAtual, custoSalvo, diff, propAtual, qtdNecessaria, estoqueAtual: ing?.estoque_kg || 0, semEstoque: qtdNecessaria && (ing?.estoque_kg || 0) < qtdNecessaria }
+        })
+        const custoPorKgAtual = itensComPrecos.reduce((s, i) => s + i.propAtual, 0)
+        const custoPorKgSalvo = producaoTarget.custo_por_kg
+        const diffTotal = custoPorKgAtual - custoPorKgSalvo
+        const custoTotal = producaoForm.quantidade_kg ? parseFloat(producaoForm.quantidade_kg) * custoPorKgAtual : 0
+        const algumSemEstoque = itensComPrecos.some(i => i.semEstoque)
+
+        return (
+          <Modal
+            title={`🔄 Produzir: ${producaoTarget.nome}`}
+            onClose={() => setShowProducaoModal(false)}
+            onSave={handleProduzir}
+            saving={savingProducao}
+            saveLabel="✅ Registrar Produção"
+          >
+            {producaoError && <div className="error-msg">{producaoError}</div>}
+
+            {/* Comparação de preços */}
+            <div style={{ marginBottom: 16, padding: '10px 14px', background: '#f8f9fa', borderRadius: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#6c757d', marginBottom: 8, textTransform: 'uppercase' }}>
+                Preços atualizados dos ingredientes
+              </div>
+              {itensComPrecos.map(item => (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #f0f0f0', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 100, fontSize: 13, fontWeight: 500 }}>{item.ingrediente_nome}</div>
+                  <div style={{ fontSize: 12, color: '#6c757d', flexShrink: 0 }}>{item.percentagem}%</div>
+                  <div style={{ fontSize: 12, flexShrink: 0 }}>
+                    {item.diff > 0.0001 && <span style={{ color: '#dc3545', fontWeight: 600 }}>▲ {fmtMoeda2(item.custoAtual)}</span>}
+                    {item.diff < -0.0001 && <span style={{ color: '#198754', fontWeight: 600 }}>▼ {fmtMoeda2(item.custoAtual)}</span>}
+                    {Math.abs(item.diff) <= 0.0001 && <span style={{ color: '#495057' }}>{fmtMoeda2(item.custoAtual)}</span>}
+                    {Math.abs(item.diff) > 0.0001 && <span style={{ color: '#6c757d', fontSize: 11, marginLeft: 4 }}>(era {fmtMoeda2(item.custoSalvo)})</span>}
+                  </div>
+                  {item.qtdNecessaria && (
+                    <div style={{ fontSize: 11, flexShrink: 0 }}>
+                      <span className={`badge ${item.semEstoque ? 'badge-red' : 'badge-green'}`}>
+                        {item.qtdNecessaria.toFixed(1)}kg / {item.estoqueAtual.toFixed(1)}kg est.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div style={{ marginTop: 10, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                <div>
+                  <span style={{ fontSize: 12, color: '#6c757d' }}>Custo/kg atual: </span>
+                  <strong style={{ color: '#198754' }}>{fmtMoeda(custoPorKgAtual)}</strong>
+                  {Math.abs(diffTotal) > 0.0001 && (
+                    <span style={{ fontSize: 11, color: diffTotal > 0 ? '#dc3545' : '#198754', marginLeft: 6 }}>
+                      ({diffTotal > 0 ? '+' : ''}{fmtMoeda(diffTotal)} vs salvo)
+                    </span>
+                  )}
+                </div>
+                {custoTotal > 0 && (
+                  <div>
+                    <span style={{ fontSize: 12, color: '#6c757d' }}>Custo total: </span>
+                    <strong style={{ color: '#0d6efd' }}>{fmtMoeda2(custoTotal)}</strong>
+                  </div>
+                )}
+              </div>
+              {algumSemEstoque && producaoForm.deduzir_estoque && (
+                <div style={{ marginTop: 8, padding: '6px 10px', background: '#fff3cd', borderRadius: 6, fontSize: 12, color: '#664d03' }}>
+                  ⚠️ Estoque insuficiente em alguns ingredientes. A produção será registrada mesmo assim, mas o estoque pode ficar negativo.
+                </div>
+              )}
+            </div>
+
+            <div className="form-grid">
+              {/* Destino */}
+              <div className="form-group span-2">
+                <label>Destino *</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button"
+                    className={`btn btn-sm ${producaoForm.destino_tipo === 'lote' ? 'btn-primary' : 'btn-outline'}`}
+                    onClick={() => setPF('destino_tipo', 'lote')}>🐖 Lote Comercial</button>
+                  <button type="button"
+                    className={`btn btn-sm ${producaoForm.destino_tipo === 'plantel' ? 'btn-primary' : 'btn-outline'}`}
+                    onClick={() => setPF('destino_tipo', 'plantel')}>🐷 Plantel Reprodutivo</button>
+                </div>
+              </div>
+
+              {producaoForm.destino_tipo === 'lote' ? (
+                <div className="form-group">
+                  <label>Lote *</label>
+                  <select value={producaoForm.lote_id} onChange={e => setPF('lote_id', e.target.value)}>
+                    <option value="">Selecione o lote</option>
+                    {lotes.map(l => <option key={l.id} value={l.id}>{l.numero}</option>)}
+                  </select>
+                </div>
+              ) : (
+                <div className="form-group">
+                  <label>Grupo do Plantel *</label>
+                  <select value={producaoForm.plantel_grupo} onChange={e => setPF('plantel_grupo', e.target.value)}>
+                    <option value="">Selecione o grupo</option>
+                    <option value="matrizes">🐷 Matrizes</option>
+                    <option value="reprodutores">🐗 Reprodutores</option>
+                    <option value="geral">🐖 Plantel Geral</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label>Data *</label>
+                <input type="date" value={producaoForm.data} onChange={e => setPF('data', e.target.value)} />
+              </div>
+
+              <div className="form-group">
+                <label>Quantidade a produzir (kg) *</label>
+                <input type="number" step="0.1" min="0.1" value={producaoForm.quantidade_kg}
+                  onChange={e => setPF('quantidade_kg', e.target.value)} placeholder="Ex: 500" />
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={producaoForm.deduzir_estoque}
+                    onChange={e => setPF('deduzir_estoque', e.target.checked)}
+                    style={{ width: 16, height: 16 }} />
+                  Deduzir ingredientes do estoque
+                </label>
+                <div style={{ fontSize: 11, color: '#6c757d', marginTop: 4 }}>
+                  Subtrai as quantidades proporcionais de cada ingrediente
+                </div>
+              </div>
+
+              <div className="form-group span-2">
+                <label>Observações</label>
+                <input value={producaoForm.observacoes} onChange={e => setPF('observacoes', e.target.value)}
+                  placeholder={`Produção via formulação: ${producaoTarget.nome}`} />
+              </div>
+            </div>
+          </Modal>
+        )
+      })()}
 
       {showImportModal && (
         <Modal title="Importar Ingredientes do Estoque (Racao)"
