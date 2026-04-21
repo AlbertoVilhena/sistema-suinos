@@ -810,11 +810,11 @@ def create_reproducao():
         data_cobertura=data_cobertura,
         data_parto_previsto=datetime.strptime(data['data_parto_previsto'], '%Y-%m-%d').date() if data.get('data_parto_previsto') else parto_previsto,
         data_parto_real=datetime.strptime(data['data_parto_real'], '%Y-%m-%d').date() if data.get('data_parto_real') else None,
-        quantidade_nascidos=data.get('quantidade_nascidos'),
-        quantidade_vivos=data.get('quantidade_vivos'),
+        quantidade_nascidos=to_int(data.get('quantidade_nascidos')),
+        quantidade_vivos=to_int(data.get('quantidade_vivos')),
         status=data.get('status', 'gestacao'),
-        observacoes=data.get('observacoes'),
-        lote_id=data.get('lote_id')
+        observacoes=data.get('observacoes') or None,
+        lote_id=to_int(data.get('lote_id'))
     )
     db.session.add(rep)
     db.session.commit()
@@ -831,9 +831,15 @@ def update_reproducao(rid):
     rep = Reproducao.query.get_or_404(rid)
     data = request.get_json()
 
-    for f in ['femea_brinco', 'macho_brinco', 'quantidade_nascidos', 'quantidade_vivos', 'status', 'observacoes', 'lote_id']:
+    for f in ['femea_brinco', 'macho_brinco', 'status']:
         if f in data:
-            setattr(rep, f, data[f])
+            setattr(rep, f, data[f] or None)
+    for f in ['observacoes']:
+        if f in data:
+            setattr(rep, f, data[f] or None)
+    for f in ['quantidade_nascidos', 'quantidade_vivos', 'lote_id']:
+        if f in data:
+            setattr(rep, f, to_int(data[f]))
     # Atualizar datas
     if 'data_cobertura' in data and data['data_cobertura']:
         dc = datetime.strptime(data['data_cobertura'], '%Y-%m-%d').date()
