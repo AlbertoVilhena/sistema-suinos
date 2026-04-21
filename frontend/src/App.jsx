@@ -14,6 +14,7 @@ import Relatorios from './pages/Relatorios'
 import Formulacao from './pages/Formulacao'
 import Usuarios from './pages/Usuarios'
 import Estoque from './pages/Estoque'
+import Plantel from './pages/Plantel'
 
 function ProtectedRoute({ children, adminOnly = false, gestaoOnly = false, noDashboard = false }) {
   const { usuario, loading } = useAuth()
@@ -38,6 +39,7 @@ function AppRoutes() {
       <Route path="/sanidade" element={<ProtectedRoute><Sanidade /></ProtectedRoute>} />
       <Route path="/reproducao" element={<ProtectedRoute><Reproducao /></ProtectedRoute>} />
       <Route path="/alimentacao" element={<ProtectedRoute><Alimentacao /></ProtectedRoute>} />
+      <Route path="/plantel" element={<ProtectedRoute><Plantel /></ProtectedRoute>} />
       <Route path="/financeiro" element={<ProtectedRoute gestaoOnly><Financeiro /></ProtectedRoute>} />
       <Route path="/relatorios" element={<ProtectedRoute gestaoOnly><Relatorios /></ProtectedRoute>} />
       <Route path="/formulacao" element={<ProtectedRoute gestaoOnly><Formulacao /></ProtectedRoute>} />

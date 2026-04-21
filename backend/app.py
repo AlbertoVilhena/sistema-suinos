@@ -350,6 +350,49 @@ class FormulacaoItem(db.Model):
 
 
 
+class Plantel(db.Model):
+    __tablename__ = 'plantel'
+    id = db.Column(db.Integer, primary_key=True)
+    brinco = db.Column(db.String(50), unique=True, nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)  # matriz, reprodutor
+    nome = db.Column(db.String(100))
+    raca = db.Column(db.String(50))
+    data_nascimento = db.Column(db.Date)
+    peso_atual = db.Column(db.Float)
+    status = db.Column(db.String(20), default='ativo')  # ativo, descartado, morto
+    origem = db.Column(db.String(20), default='comprado')  # nascido, comprado
+    custo_aquisicao = db.Column(db.Float, default=0)
+    observacoes = db.Column(db.Text)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        total_partos = 0
+        if self.tipo == 'matriz':
+            total_partos = Reproducao.query.filter(
+                Reproducao.femea_brinco == self.brinco,
+                Reproducao.status == 'parto'
+            ).count()
+        idade_meses = None
+        if self.data_nascimento:
+            idade_meses = (date.today() - self.data_nascimento).days // 30
+        return {
+            'id': self.id,
+            'brinco': self.brinco,
+            'tipo': self.tipo,
+            'nome': self.nome or '',
+            'raca': self.raca or '',
+            'data_nascimento': self.data_nascimento.isoformat() if self.data_nascimento else None,
+            'idade_meses': idade_meses,
+            'peso_atual': self.peso_atual,
+            'status': self.status,
+            'origem': self.origem,
+            'custo_aquisicao': self.custo_aquisicao or 0,
+            'observacoes': self.observacoes or '',
+            'total_partos': total_partos,
+            'criado_em': self.criado_em.isoformat()
+        }
+
+
 class Pesagem(db.Model):
     __tablename__ = 'pesagens'
     id = db.Column(db.Integer, primary_key=True)
@@ -1516,6 +1559,78 @@ def criar_animais_lote(lid):
         animais_criados.append(animal.brinco)
     db.session.commit()
     return jsonify({'criados': len(animais_criados), 'brincos': animais_criados[:10]}), 201
+
+# ============== PLANTEL ==============
+
+@app.route('/api/plantel', methods=['GET'])
+@jwt_required()
+def get_plantel():
+    tipo = request.args.get('tipo')
+    q = Plantel.query
+    if tipo:
+        q = q.filter_by(tipo=tipo)
+    return jsonify([p.to_dict() for p in q.order_by(Plantel.brinco).all()])
+
+@app.route('/api/plantel', methods=['POST'])
+@jwt_required()
+def create_plantel():
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    data = request.get_json()
+    if not data.get('brinco'):
+        return jsonify({'error': 'Brinco é obrigatório'}), 400
+    if data.get('tipo') not in ['matriz', 'reprodutor']:
+        return jsonify({'error': 'Tipo deve ser matriz ou reprodutor'}), 400
+    if Plantel.query.filter_by(brinco=data['brinco']).first():
+        return jsonify({'error': f"Brinco '{data['brinco']}' já cadastrado no plantel"}), 400
+    p = Plantel(
+        brinco=data['brinco'],
+        tipo=data['tipo'],
+        nome=data.get('nome') or None,
+        raca=data.get('raca') or None,
+        data_nascimento=date.fromisoformat(data['data_nascimento']) if data.get('data_nascimento') else None,
+        peso_atual=to_float(data.get('peso_atual')),
+        status=data.get('status', 'ativo'),
+        origem=data.get('origem', 'comprado'),
+        custo_aquisicao=to_float(data.get('custo_aquisicao'), 0),
+        observacoes=data.get('observacoes') or None
+    )
+    db.session.add(p)
+    db.session.commit()
+    return jsonify(p.to_dict()), 201
+
+@app.route('/api/plantel/<int:pid>', methods=['PUT'])
+@jwt_required()
+def update_plantel(pid):
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    p = Plantel.query.get_or_404(pid)
+    data = request.get_json()
+    for f in ['brinco', 'tipo', 'nome', 'raca', 'status', 'origem', 'observacoes']:
+        if f in data:
+            setattr(p, f, data[f] or None)
+    if 'data_nascimento' in data:
+        p.data_nascimento = date.fromisoformat(data['data_nascimento']) if data['data_nascimento'] else None
+    if 'peso_atual' in data:
+        p.peso_atual = to_float(data['peso_atual'])
+    if 'custo_aquisicao' in data:
+        p.custo_aquisicao = to_float(data.get('custo_aquisicao'), 0)
+    db.session.commit()
+    return jsonify(p.to_dict())
+
+@app.route('/api/plantel/<int:pid>', methods=['DELETE'])
+@jwt_required()
+def delete_plantel(pid):
+    u = get_current_user()
+    if not can_edit(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    p = Plantel.query.get_or_404(pid)
+    db.session.delete(p)
+    db.session.commit()
+    return jsonify({'ok': True})
+
 
 # ============== PESAGENS ==============
 

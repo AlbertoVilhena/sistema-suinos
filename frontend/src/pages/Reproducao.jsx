@@ -38,10 +38,21 @@ export default function Reproducao() {
   const [loteForm, setLoteForm] = useState({})
   const [savingLote, setSavingLote] = useState(false)
 
+  const [matrizes, setMatrizes] = useState([])
+  const [reprodutores, setReprodutores] = useState([])
+
   const load = () => {
-    Promise.all([api.get('/api/reproducoes'), api.get('/api/lotes')])
-      .then(([rr, rl]) => { setReproducoes(rr.data); setLotes(rl.data) })
-      .finally(() => setLoading(false))
+    Promise.all([
+      api.get('/api/reproducoes'),
+      api.get('/api/lotes'),
+      api.get('/api/plantel?tipo=matriz'),
+      api.get('/api/plantel?tipo=reprodutor')
+    ]).then(([rr, rl, rm, rep]) => {
+      setReproducoes(rr.data)
+      setLotes(rl.data)
+      setMatrizes(rm.data.filter(m => m.status === 'ativo'))
+      setReprodutores(rep.data.filter(r => r.status === 'ativo'))
+    }).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
@@ -202,12 +213,36 @@ export default function Reproducao() {
           {error && <div className="error-msg">{error}</div>}
           <div className="form-grid">
             <div className="form-group">
-              <label>Fêmea (Brinco)</label>
-              <input value={form.femea_brinco} onChange={e => set('femea_brinco', e.target.value)} placeholder="Ex: F001" />
+              <label>Matriz (Fêmea) *</label>
+              {matrizes.length > 0 ? (
+                <select value={form.femea_brinco} onChange={e => set('femea_brinco', e.target.value)}>
+                  <option value="">Selecione a matriz...</option>
+                  {matrizes.map(m => (
+                    <option key={m.id} value={m.brinco}>
+                      {m.brinco}{m.nome ? ` — ${m.nome}` : ''}{m.raca ? ` (${m.raca})` : ''} · {m.total_partos} parto(s)
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input value={form.femea_brinco} onChange={e => set('femea_brinco', e.target.value)}
+                  placeholder="Brinco da fêmea (cadastre no Plantel)" />
+              )}
             </div>
             <div className="form-group">
-              <label>Macho (Brinco)</label>
-              <input value={form.macho_brinco} onChange={e => set('macho_brinco', e.target.value)} placeholder="Ex: M001" />
+              <label>Reprodutor (Macho)</label>
+              {reprodutores.length > 0 ? (
+                <select value={form.macho_brinco} onChange={e => set('macho_brinco', e.target.value)}>
+                  <option value="">Selecione o reprodutor...</option>
+                  {reprodutores.map(r => (
+                    <option key={r.id} value={r.brinco}>
+                      {r.brinco}{r.nome ? ` — ${r.nome}` : ''}{r.raca ? ` (${r.raca})` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input value={form.macho_brinco} onChange={e => set('macho_brinco', e.target.value)}
+                  placeholder="Brinco do macho (cadastre no Plantel)" />
+              )}
             </div>
             <div className="form-group">
               <label>Lote</label>

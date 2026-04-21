@@ -6,6 +6,7 @@ const navItems = [
   { to: '/', icon: '📊', label: 'Dashboard', section: 'GERAL', noDashboard: true },
   { to: '/lotes', icon: '🐖', label: 'Lotes', section: 'PRODUÇÃO' },
   { to: '/animais', icon: '🐷', label: 'Animais' },
+  { to: '/plantel', icon: '🐗', label: 'Plantel Reprodutivo' },
   { to: '/alimentacao', icon: '🌽', label: 'Alimentação' },
   { to: '/sanidade', icon: '💉', label: 'Sanidade' },
   { to: '/reproducao', icon: '🫀', label: 'Reprodução' },
