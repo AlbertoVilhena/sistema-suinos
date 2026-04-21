@@ -159,6 +159,7 @@ class Vacinacao(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     lote_id = db.Column(db.Integer, db.ForeignKey('lotes.id'))
     animal_id = db.Column(db.Integer, db.ForeignKey('animais.id'), nullable=True)
+    plantel_brinco = db.Column(db.String(50))  # brinco do animal do plantel
     vacina = db.Column(db.String(100), nullable=False)
     data = db.Column(db.Date, nullable=False)
     dose = db.Column(db.String(50))
@@ -174,6 +175,7 @@ class Vacinacao(db.Model):
             'lote_id': self.lote_id,
             'lote_numero': lote.numero if lote else None,
             'animal_id': self.animal_id,
+            'plantel_brinco': self.plantel_brinco,
             'vacina': self.vacina,
             'data': self.data.isoformat() if self.data else None,
             'dose': self.dose,
@@ -221,7 +223,8 @@ class Reproducao(db.Model):
 class Alimentacao(db.Model):
     __tablename__ = 'alimentacoes'
     id = db.Column(db.Integer, primary_key=True)
-    lote_id = db.Column(db.Integer, db.ForeignKey('lotes.id'), nullable=False)
+    lote_id = db.Column(db.Integer, db.ForeignKey('lotes.id'), nullable=True)
+    plantel_grupo = db.Column(db.String(20))  # matrizes, reprodutores, geral
     formulacao_id = db.Column(db.Integer, db.ForeignKey('formulacoes.id'), nullable=True)
     data = db.Column(db.Date, nullable=False)
     racao_tipo = db.Column(db.String(100))
@@ -238,6 +241,7 @@ class Alimentacao(db.Model):
             'formulacao_id': self.formulacao_id,
             'lote_id': self.lote_id,
             'lote_numero': lote.numero if lote else None,
+            'plantel_grupo': self.plantel_grupo,
             'data': self.data.isoformat() if self.data else None,
             'racao_tipo': self.racao_tipo,
             'quantidade_kg': self.quantidade_kg,
@@ -775,12 +779,15 @@ def create_vacinacao():
         return jsonify({'error': 'Permissão negada'}), 403
 
     data = request.get_json()
-    if not data.get('vacina') or not data.get('data') or not data.get('lote_id'):
-        return jsonify({'error': 'Vacina, data e lote são obrigatórios'}), 400
+    if not data.get('vacina') or not data.get('data'):
+        return jsonify({'error': 'Vacina e data são obrigatórios'}), 400
+    if not data.get('lote_id') and not data.get('plantel_brinco'):
+        return jsonify({'error': 'Selecione um lote ou um animal do plantel'}), 400
 
     vac = Vacinacao(
-        lote_id=data['lote_id'],
+        lote_id=to_int(data.get('lote_id')),
         animal_id=to_int(data.get('animal_id')),
+        plantel_brinco=data.get('plantel_brinco') or None,
         vacina=data['vacina'],
         data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
         dose=data.get('dose'),
@@ -803,9 +810,9 @@ def update_vacinacao(vid):
     vac = Vacinacao.query.get_or_404(vid)
     data = request.get_json()
 
-    for f in ['vacina', 'dose', 'responsavel', 'custo', 'observacoes', 'lote_id', 'animal_id']:
+    for f in ['vacina', 'dose', 'responsavel', 'custo', 'observacoes', 'lote_id', 'animal_id', 'plantel_brinco']:
         if f in data:
-            setattr(vac, f, data[f])
+            setattr(vac, f, data[f] if data[f] != '' else None)
     if 'data' in data:
         vac.data = datetime.strptime(data['data'], '%Y-%m-%d').date()
 
@@ -931,8 +938,10 @@ def create_alimentacao():
         return jsonify({'error': 'Permissão negada'}), 403
 
     data = request.get_json()
-    if not data.get('lote_id') or not data.get('data') or not data.get('quantidade_kg'):
-        return jsonify({'error': 'Lote, data e quantidade são obrigatórios'}), 400
+    if not data.get('data') or not data.get('quantidade_kg'):
+        return jsonify({'error': 'Data e quantidade são obrigatórios'}), 400
+    if not data.get('lote_id') and not data.get('plantel_grupo'):
+        return jsonify({'error': 'Selecione um lote ou um grupo do plantel'}), 400
 
     formulacao_id = to_int(data.get('formulacao_id'))
     custo_unitario = to_float(data.get('custo_unitario'))
@@ -943,7 +952,8 @@ def create_alimentacao():
             custo_unitario = f.calcular_custo_por_kg()
 
     alim = Alimentacao(
-        lote_id=data['lote_id'],
+        lote_id=to_int(data.get('lote_id')),
+        plantel_grupo=data.get('plantel_grupo') or None,
         formulacao_id=formulacao_id,
         data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
         racao_tipo=data.get('racao_tipo'),
@@ -966,9 +976,9 @@ def update_alimentacao(aid):
     alim = Alimentacao.query.get_or_404(aid)
     data = request.get_json()
 
-    for f in ['racao_tipo', 'quantidade_kg', 'custo_unitario', 'observacoes', 'lote_id']:
+    for f in ['racao_tipo', 'quantidade_kg', 'custo_unitario', 'observacoes', 'lote_id', 'plantel_grupo']:
         if f in data:
-            setattr(alim, f, data[f])
+            setattr(alim, f, data[f] if data[f] != '' else None)
     if 'data' in data:
         alim.data = datetime.strptime(data['data'], '%Y-%m-%d').date()
 

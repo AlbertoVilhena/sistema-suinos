@@ -9,8 +9,17 @@ const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFr
 
 const today = new Date().toISOString().split('T')[0]
 
+const plantelGrupoLabel = {
+  matrizes: '🐷 Matrizes',
+  reprodutores: '🐗 Reprodutores',
+  geral: '🐖 Plantel Geral',
+}
+
 const emptyForm = {
-  lote_id: '', data: today, formulacao_id: '', racao_tipo: '', quantidade_kg: '', custo_unitario: '', observacoes: ''
+  destino_tipo: 'lote',
+  lote_id: '', plantel_grupo: '',
+  data: today, formulacao_id: '', racao_tipo: '',
+  quantidade_kg: '', custo_unitario: '', observacoes: ''
 }
 
 export default function Alimentacao() {
@@ -19,7 +28,7 @@ export default function Alimentacao() {
   const [lotes, setLotes] = useState([])
   const [formulacoes, setFormulacoes] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filterLote, setFilterLote] = useState('')
+  const [filterDestino, setFilterDestino] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(emptyForm)
@@ -41,14 +50,31 @@ export default function Alimentacao() {
   useEffect(() => { load() }, [])
 
   const openCreate = () => { setEditing(null); setForm(emptyForm); setError(''); setShowModal(true) }
-  const openEdit = (a) => { setEditing(a); setForm({ ...emptyForm, ...a, formulacao_id: a.formulacao_id || '' }); setError(''); setShowModal(true) }
+  const openEdit = (a) => {
+    setEditing(a)
+    setForm({
+      ...emptyForm, ...a,
+      formulacao_id: a.formulacao_id || '',
+      destino_tipo: a.plantel_grupo ? 'plantel' : 'lote',
+    })
+    setError('')
+    setShowModal(true)
+  }
 
   const handleSave = async () => {
     setError('')
     setSaving(true)
     try {
-      if (editing) { await api.put(`/api/alimentacoes/${editing.id}`, form) }
-      else { await api.post('/api/alimentacoes', form) }
+      const payload = { ...form }
+      if (payload.destino_tipo === 'plantel') {
+        payload.lote_id = ''
+      } else {
+        payload.plantel_grupo = ''
+      }
+      delete payload.destino_tipo
+
+      if (editing) { await api.put(`/api/alimentacoes/${editing.id}`, payload) }
+      else { await api.post('/api/alimentacoes', payload) }
       setShowModal(false)
       load()
     } catch (e) {
@@ -65,7 +91,6 @@ export default function Alimentacao() {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  // Ao selecionar formulação, auto-preenche tipo e custo
   const handleFormulacaoChange = (fid) => {
     const f = formulacoes.find(f => String(f.id) === String(fid))
     setForm(prev => ({
@@ -76,7 +101,13 @@ export default function Alimentacao() {
     }))
   }
 
-  const filtered = alims.filter(a => !filterLote || String(a.lote_id) === filterLote)
+  const filtered = alims.filter(a => {
+    if (!filterDestino) return true
+    if (filterDestino === 'plantel') return !!a.plantel_grupo
+    if (filterDestino.startsWith('pg:')) return a.plantel_grupo === filterDestino.slice(3)
+    return String(a.lote_id) === filterDestino
+  })
+
   const totalKg = filtered.reduce((s, a) => s + (a.quantidade_kg || 0), 0)
   const totalCusto = filtered.reduce((s, a) => s + (a.custo_total || 0), 0)
 
@@ -103,9 +134,17 @@ export default function Alimentacao() {
       <div className="table-container">
         <div className="table-toolbar">
           <div className="filter-bar">
-            <select value={filterLote} onChange={e => setFilterLote(e.target.value)}>
-              <option value="">Todos os lotes</option>
-              {lotes.map(l => <option key={l.id} value={l.id}>{l.numero}</option>)}
+            <select value={filterDestino} onChange={e => setFilterDestino(e.target.value)}>
+              <option value="">Todos</option>
+              <optgroup label="Plantel Reprodutivo">
+                <option value="plantel">🐖 Todo o Plantel</option>
+                <option value="pg:matrizes">🐷 Matrizes</option>
+                <option value="pg:reprodutores">🐗 Reprodutores</option>
+                <option value="pg:geral">Plantel Geral</option>
+              </optgroup>
+              <optgroup label="Lotes Comerciais">
+                {lotes.map(l => <option key={l.id} value={String(l.id)}>{l.numero}</option>)}
+              </optgroup>
             </select>
           </div>
           <span style={{ fontSize: 13, color: '#6c757d' }}>{filtered.length} registro(s)</span>
@@ -115,7 +154,7 @@ export default function Alimentacao() {
           <table>
             <thead>
               <tr>
-                <th>Data</th><th>Lote</th><th>Formulação / Tipo</th><th>Quantidade (kg)</th>
+                <th>Data</th><th>Destino</th><th>Formulação / Tipo</th><th>Quantidade (kg)</th>
                 <th>Custo/kg</th><th>Custo Total</th><th>Observações</th><th>Ações</th>
               </tr>
             </thead>
@@ -125,7 +164,11 @@ export default function Alimentacao() {
               ) : filtered.map(a => (
                 <tr key={a.id}>
                   <td data-label="Data">{fmtData(a.data)}</td>
-                  <td data-label="Lote">{a.lote_numero || '-'}</td>
+                  <td data-label="Destino">
+                    {a.plantel_grupo
+                      ? <span className="badge badge-purple">{plantelGrupoLabel[a.plantel_grupo] || a.plantel_grupo}</span>
+                      : a.lote_numero || '-'}
+                  </td>
                   <td data-label="Ração">
                     {a.formulacao_nome && <div style={{ fontSize: 11, color: '#0d6efd', fontWeight: 600 }}>🌾 {a.formulacao_nome}</div>}
                     {a.racao_tipo || '-'}
@@ -152,17 +195,52 @@ export default function Alimentacao() {
           onClose={() => setShowModal(false)} onSave={handleSave} saving={saving}>
           {error && <div className="error-msg">{error}</div>}
           <div className="form-grid">
-            <div className="form-group">
-              <label>Lote *</label>
-              <select value={form.lote_id} onChange={e => set('lote_id', e.target.value)}>
-                <option value="">Selecione o lote</option>
-                {lotes.map(l => <option key={l.id} value={l.id}>{l.numero}</option>)}
-              </select>
+            {/* Destino */}
+            <div className="form-group span-2">
+              <label>Destino *</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${form.destino_tipo === 'lote' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => set('destino_tipo', 'lote')}
+                >
+                  🐖 Lote Comercial
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${form.destino_tipo === 'plantel' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => set('destino_tipo', 'plantel')}
+                >
+                  🐷 Plantel Reprodutivo
+                </button>
+              </div>
             </div>
+
+            {form.destino_tipo === 'lote' ? (
+              <div className="form-group">
+                <label>Lote *</label>
+                <select value={form.lote_id} onChange={e => set('lote_id', e.target.value)}>
+                  <option value="">Selecione o lote</option>
+                  {lotes.map(l => <option key={l.id} value={l.id}>{l.numero}</option>)}
+                </select>
+              </div>
+            ) : (
+              <div className="form-group">
+                <label>Grupo do Plantel *</label>
+                <select value={form.plantel_grupo} onChange={e => set('plantel_grupo', e.target.value)}>
+                  <option value="">Selecione o grupo</option>
+                  <option value="matrizes">🐷 Matrizes</option>
+                  <option value="reprodutores">🐗 Reprodutores</option>
+                  <option value="geral">🐖 Plantel Geral</option>
+                </select>
+              </div>
+            )}
+
             <div className="form-group">
               <label>Data *</label>
               <input type="date" value={form.data} onChange={e => set('data', e.target.value)} />
             </div>
+
             <div className="form-group span-2">
               <label>Formulação de Ração</label>
               <select value={form.formulacao_id} onChange={e => handleFormulacaoChange(e.target.value)}>
@@ -182,7 +260,7 @@ export default function Alimentacao() {
             <div className="form-group span-2">
               <label>Tipo de Ração (descrição livre)</label>
               <input value={form.racao_tipo} onChange={e => set('racao_tipo', e.target.value)}
-                placeholder="Ex: Ração Inicial, Crescimento..." />
+                placeholder="Ex: Ração Gestante, Lactação, Crescimento..." />
             </div>
             <div className="form-group">
               <label>Quantidade (kg) *</label>
