@@ -412,10 +412,12 @@ export default function Formulacao() {
 
       {showProducaoModal && producaoTarget && (() => {
         // Calcula custo atual e variações por ingrediente
+        // custo_unitario agora já é o preço atual (backend atualizado)
+        // custo_unitario_salvo é o snapshot histórico
         const itensComPrecos = producaoTarget.itens.map(item => {
           const ing = ingredientes.find(i => i.id === item.ingrediente_id)
-          const custoAtual = ing?.custo_por_kg || 0
-          const custoSalvo = item.custo_unitario || 0
+          const custoAtual = ing?.custo_por_kg ?? item.custo_unitario ?? 0
+          const custoSalvo = item.custo_unitario_salvo ?? item.custo_unitario ?? 0
           const diff = custoAtual - custoSalvo
           const propAtual = (item.percentagem / 100) * custoAtual
           const qtdNecessaria = producaoForm.quantidade_kg ? (parseFloat(producaoForm.quantidade_kg) * item.percentagem / 100) : null

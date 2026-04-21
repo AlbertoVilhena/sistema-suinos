@@ -313,7 +313,13 @@ class Formulacao(db.Model):
     itens = db.relationship('FormulacaoItem', backref='formulacao', lazy=True, cascade='all, delete-orphan')
 
     def calcular_custo_por_kg(self):
-        return round(sum((i.percentagem / 100) * (i.custo_unitario or 0) for i in self.itens), 4)
+        # Sempre usa o preço atual do ingrediente para refletir cotações atualizadas
+        total = 0
+        for i in self.itens:
+            ing = Ingrediente.query.get(i.ingrediente_id)
+            preco_atual = (ing.custo_por_kg or 0) if ing else (i.custo_unitario or 0)
+            total += (i.percentagem / 100) * preco_atual
+        return round(total, 4)
 
     def to_dict(self):
         itens = [i.to_dict() for i in self.itens]
@@ -340,6 +346,8 @@ class FormulacaoItem(db.Model):
 
     def to_dict(self):
         ing = Ingrediente.query.get(self.ingrediente_id)
+        # Usa preço atual do ingrediente; custo_unitario é apenas o snapshot histórico
+        preco_atual = (ing.custo_por_kg or 0) if ing else (self.custo_unitario or 0)
         return {
             'id': self.id,
             'formulacao_id': self.formulacao_id,
@@ -348,8 +356,9 @@ class FormulacaoItem(db.Model):
             'ingrediente_unidade': ing.unidade if ing else 'kg',
             'estoque_disponivel': ing.estoque_kg if ing else 0,
             'percentagem': self.percentagem,
-            'custo_unitario': self.custo_unitario or 0,
-            'custo_proporcional': round((self.percentagem / 100) * (self.custo_unitario or 0), 4)
+            'custo_unitario': preco_atual,           # preço atual (para exibição)
+            'custo_unitario_salvo': self.custo_unitario or 0,  # snapshot histórico
+            'custo_proporcional': round((self.percentagem / 100) * preco_atual, 4)
         }
 
 
