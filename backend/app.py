@@ -457,6 +457,74 @@ class Estoque(db.Model):
             'atualizado_em': self.atualizado_em.isoformat() if self.atualizado_em else None
         }
 
+class PlanoVacinacao(db.Model):
+    __tablename__ = 'planos_vacinacao'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False)
+    descricao = db.Column(db.Text)
+    tipo_destino = db.Column(db.String(20), default='lote')  # lote, plantel
+    fase_lote = db.Column(db.String(30))  # maternidade, creche, crescimento, terminacao
+    ativo = db.Column(db.Boolean, default=True)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    itens = db.relationship('PlanoVacinacaoItem', backref='plano', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nome': self.nome,
+            'descricao': self.descricao,
+            'tipo_destino': self.tipo_destino,
+            'fase_lote': self.fase_lote,
+            'ativo': self.ativo,
+            'itens': [i.to_dict() for i in sorted(self.itens, key=lambda x: x.dias_apos_entrada)],
+            'criado_em': self.criado_em.isoformat()
+        }
+
+
+class PlanoVacinacaoItem(db.Model):
+    __tablename__ = 'plano_vacinacao_itens'
+    id = db.Column(db.Integer, primary_key=True)
+    plano_id = db.Column(db.Integer, db.ForeignKey('planos_vacinacao.id'), nullable=False)
+    vacina = db.Column(db.String(100), nullable=False)
+    dias_apos_entrada = db.Column(db.Integer, nullable=False, default=0)
+    dose = db.Column(db.String(50))
+    observacoes = db.Column(db.Text)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'plano_id': self.plano_id,
+            'vacina': self.vacina,
+            'dias_apos_entrada': self.dias_apos_entrada,
+            'dose': self.dose,
+            'observacoes': self.observacoes,
+        }
+
+
+class AplicacaoPlano(db.Model):
+    __tablename__ = 'aplicacoes_plano'
+    id = db.Column(db.Integer, primary_key=True)
+    plano_id = db.Column(db.Integer, db.ForeignKey('planos_vacinacao.id'), nullable=False)
+    lote_id = db.Column(db.Integer, db.ForeignKey('lotes.id'), nullable=True)
+    plantel_grupo = db.Column(db.String(20))  # matrizes, reprodutores, geral
+    data_inicio = db.Column(db.Date, nullable=False)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        plano = PlanoVacinacao.query.get(self.plano_id)
+        lote = Lote.query.get(self.lote_id) if self.lote_id else None
+        return {
+            'id': self.id,
+            'plano_id': self.plano_id,
+            'plano_nome': plano.nome if plano else None,
+            'lote_id': self.lote_id,
+            'lote_numero': lote.numero if lote else None,
+            'plantel_grupo': self.plantel_grupo,
+            'data_inicio': self.data_inicio.isoformat() if self.data_inicio else None,
+            'criado_em': self.criado_em.isoformat()
+        }
+
+
 # ============== HELPERS ==============
 
 def to_int(val, default=None):
@@ -840,6 +908,199 @@ def delete_vacinacao(vid):
     db.session.delete(vac)
     db.session.commit()
     return jsonify({'message': 'Vacinação excluída com sucesso'})
+
+
+# ============== PLANO VACINACAO ROUTES ==============
+
+@app.route('/api/planos-vacinacao', methods=['GET'])
+@jwt_required()
+def get_planos_vacinacao():
+    planos = PlanoVacinacao.query.order_by(PlanoVacinacao.nome).all()
+    return jsonify([p.to_dict() for p in planos])
+
+
+@app.route('/api/planos-vacinacao', methods=['POST'])
+@jwt_required()
+def create_plano_vacinacao():
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    data = request.get_json()
+    if not data.get('nome'):
+        return jsonify({'error': 'Nome é obrigatório'}), 400
+
+    plano = PlanoVacinacao(
+        nome=data['nome'],
+        descricao=data.get('descricao'),
+        tipo_destino=data.get('tipo_destino', 'lote'),
+        fase_lote=data.get('fase_lote') or None,
+        ativo=data.get('ativo', True)
+    )
+    db.session.add(plano)
+    db.session.flush()
+
+    for item in data.get('itens', []):
+        pi = PlanoVacinacaoItem(
+            plano_id=plano.id,
+            vacina=item['vacina'],
+            dias_apos_entrada=to_int(item.get('dias_apos_entrada'), 0),
+            dose=item.get('dose'),
+            observacoes=item.get('observacoes')
+        )
+        db.session.add(pi)
+
+    db.session.commit()
+    return jsonify(plano.to_dict()), 201
+
+
+@app.route('/api/planos-vacinacao/<int:pid>', methods=['PUT'])
+@jwt_required()
+def update_plano_vacinacao(pid):
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    plano = PlanoVacinacao.query.get_or_404(pid)
+    data = request.get_json()
+
+    for f in ['nome', 'descricao', 'tipo_destino', 'fase_lote', 'ativo']:
+        if f in data:
+            setattr(plano, f, data[f] if data[f] != '' else None)
+
+    if 'itens' in data:
+        PlanoVacinacaoItem.query.filter_by(plano_id=pid).delete()
+        for item in data['itens']:
+            pi = PlanoVacinacaoItem(
+                plano_id=pid,
+                vacina=item['vacina'],
+                dias_apos_entrada=to_int(item.get('dias_apos_entrada'), 0),
+                dose=item.get('dose'),
+                observacoes=item.get('observacoes')
+            )
+            db.session.add(pi)
+
+    db.session.commit()
+    return jsonify(plano.to_dict())
+
+
+@app.route('/api/planos-vacinacao/<int:pid>', methods=['DELETE'])
+@jwt_required()
+def delete_plano_vacinacao(pid):
+    u = get_current_user()
+    if not can_edit(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    plano = PlanoVacinacao.query.get_or_404(pid)
+    db.session.delete(plano)
+    db.session.commit()
+    return jsonify({'message': 'Plano excluído'})
+
+
+@app.route('/api/aplicacoes-plano', methods=['GET'])
+@jwt_required()
+def get_aplicacoes_plano():
+    aplicacoes = AplicacaoPlano.query.order_by(AplicacaoPlano.data_inicio.desc()).all()
+    return jsonify([a.to_dict() for a in aplicacoes])
+
+
+@app.route('/api/aplicacoes-plano', methods=['POST'])
+@jwt_required()
+def create_aplicacao_plano():
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    data = request.get_json()
+    if not data.get('plano_id') or not data.get('data_inicio'):
+        return jsonify({'error': 'Plano e data de início são obrigatórios'}), 400
+    if not data.get('lote_id') and not data.get('plantel_grupo'):
+        return jsonify({'error': 'Selecione um lote ou grupo do plantel'}), 400
+
+    ap = AplicacaoPlano(
+        plano_id=to_int(data['plano_id']),
+        lote_id=to_int(data.get('lote_id')),
+        plantel_grupo=data.get('plantel_grupo') or None,
+        data_inicio=datetime.strptime(data['data_inicio'], '%Y-%m-%d').date()
+    )
+    db.session.add(ap)
+    db.session.commit()
+    return jsonify(ap.to_dict()), 201
+
+
+@app.route('/api/aplicacoes-plano/<int:aid>', methods=['DELETE'])
+@jwt_required()
+def delete_aplicacao_plano(aid):
+    u = get_current_user()
+    if not can_edit(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    ap = AplicacaoPlano.query.get_or_404(aid)
+    db.session.delete(ap)
+    db.session.commit()
+    return jsonify({'message': 'Aplicação removida'})
+
+
+@app.route('/api/agenda-vacinacao', methods=['GET'])
+@jwt_required()
+def get_agenda_vacinacao():
+    hoje = date.today()
+    aplicacoes = AplicacaoPlano.query.all()
+    agenda = []
+
+    for ap in aplicacoes:
+        plano = PlanoVacinacao.query.get(ap.plano_id)
+        if not plano or not plano.ativo:
+            continue
+        lote = Lote.query.get(ap.lote_id) if ap.lote_id else None
+
+        for item in plano.itens:
+            data_prevista = ap.data_inicio + timedelta(days=item.dias_apos_entrada)
+            dias_diff = (data_prevista - hoje).days
+
+            # Verifica se já foi aplicada (vacina no mesmo lote/plantel próxima à data)
+            ja_aplicada = False
+            if ap.lote_id:
+                ja_aplicada = Vacinacao.query.filter(
+                    Vacinacao.lote_id == ap.lote_id,
+                    Vacinacao.vacina == item.vacina,
+                    Vacinacao.data >= data_prevista - timedelta(days=5),
+                    Vacinacao.data <= data_prevista + timedelta(days=5)
+                ).first() is not None
+            elif ap.plantel_grupo:
+                # Para plantel_grupo, verifica se há registro com plantel_brinco de qualquer animal do grupo
+                ja_aplicada = Vacinacao.query.filter(
+                    Vacinacao.plantel_brinco.isnot(None),
+                    Vacinacao.vacina == item.vacina,
+                    Vacinacao.data >= data_prevista - timedelta(days=5),
+                    Vacinacao.data <= data_prevista + timedelta(days=5)
+                ).first() is not None
+
+            if ja_aplicada:
+                status = 'aplicada'
+            elif dias_diff < 0:
+                status = 'atrasada'
+            elif dias_diff <= 7:
+                status = 'proxima'
+            else:
+                status = 'futura'
+
+            # Só retorna pendentes e próximas (não mostra futuro distante nem aplicadas)
+            if status in ('atrasada', 'proxima'):
+                agenda.append({
+                    'aplicacao_id': ap.id,
+                    'plano_id': plano.id,
+                    'plano_nome': plano.nome,
+                    'item_id': item.id,
+                    'vacina': item.vacina,
+                    'dose': item.dose,
+                    'dias_apos_entrada': item.dias_apos_entrada,
+                    'data_prevista': data_prevista.isoformat(),
+                    'dias_diff': dias_diff,
+                    'status': status,
+                    'lote_id': ap.lote_id,
+                    'lote_numero': lote.numero if lote else None,
+                    'plantel_grupo': ap.plantel_grupo,
+                    'observacoes': item.observacoes,
+                })
+
+    agenda.sort(key=lambda x: x['data_prevista'])
+    return jsonify(agenda)
 
 
 # ============== REPRODUCAO ROUTES ==============
@@ -1757,6 +2018,7 @@ def init_db():
         migrations = [
             "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_grupo VARCHAR(20)",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS plantel_brinco VARCHAR(50)",
+            "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS custo FLOAT DEFAULT 0",
         ]
         for sql in migrations:
             try:
