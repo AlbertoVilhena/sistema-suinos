@@ -159,10 +159,12 @@ class Vacinacao(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     lote_id = db.Column(db.Integer, db.ForeignKey('lotes.id'))
     animal_id = db.Column(db.Integer, db.ForeignKey('animais.id'), nullable=True)
-    plantel_brinco = db.Column(db.String(50))  # brinco do animal do plantel
+    plantel_brinco = db.Column(db.String(50))
     vacina = db.Column(db.String(100), nullable=False)
     data = db.Column(db.Date, nullable=False)
     dose = db.Column(db.String(50))
+    marca_fabricante = db.Column(db.String(100))
+    lote_vacina = db.Column(db.String(50))   # lote do fabricante/embalagem
     responsavel = db.Column(db.String(100))
     custo = db.Column(db.Float, default=0)
     observacoes = db.Column(db.Text)
@@ -179,6 +181,8 @@ class Vacinacao(db.Model):
             'vacina': self.vacina,
             'data': self.data.isoformat() if self.data else None,
             'dose': self.dose,
+            'marca_fabricante': self.marca_fabricante,
+            'lote_vacina': self.lote_vacina,
             'responsavel': self.responsavel,
             'custo': self.custo or 0,
             'observacoes': self.observacoes,
@@ -868,6 +872,8 @@ def create_vacinacao():
         vacina=data['vacina'],
         data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
         dose=data.get('dose'),
+        marca_fabricante=data.get('marca_fabricante'),
+        lote_vacina=data.get('lote_vacina'),
         responsavel=data.get('responsavel'),
         custo=to_float(data.get('custo'), 0),
         observacoes=data.get('observacoes')
@@ -887,7 +893,7 @@ def update_vacinacao(vid):
     vac = Vacinacao.query.get_or_404(vid)
     data = request.get_json()
 
-    for f in ['vacina', 'dose', 'responsavel', 'custo', 'observacoes', 'lote_id', 'animal_id', 'plantel_brinco']:
+    for f in ['vacina', 'dose', 'marca_fabricante', 'lote_vacina', 'responsavel', 'custo', 'observacoes', 'lote_id', 'animal_id', 'plantel_brinco']:
         if f in data:
             setattr(vac, f, data[f] if data[f] != '' else None)
     if 'data' in data:
@@ -908,6 +914,90 @@ def delete_vacinacao(vid):
     db.session.delete(vac)
     db.session.commit()
     return jsonify({'message': 'Vacinação excluída com sucesso'})
+
+
+# ============== RELATORIO VACINACAO ==============
+
+@app.route('/api/relatorio-vacinacao', methods=['GET'])
+@jwt_required()
+def relatorio_vacinacao():
+    vacinacoes = Vacinacao.query.order_by(Vacinacao.data.desc()).all()
+
+    # Agrupado por vacina
+    por_vacina = {}
+    for v in vacinacoes:
+        key = v.vacina
+        if key not in por_vacina:
+            por_vacina[key] = {'vacina': key, 'total_doses': 0, 'custo_total': 0, 'registros': []}
+        por_vacina[key]['total_doses'] += 1
+        por_vacina[key]['custo_total'] += v.custo or 0
+        por_vacina[key]['registros'].append(v.to_dict())
+
+    # Agrupado por lote
+    por_lote = {}
+    for v in vacinacoes:
+        if not v.lote_id:
+            continue
+        lote = Lote.query.get(v.lote_id)
+        key = v.lote_id
+        if key not in por_lote:
+            por_lote[key] = {'lote_id': v.lote_id, 'lote_numero': lote.numero if lote else '-',
+                             'total_doses': 0, 'custo_total': 0, 'vacinas': []}
+        por_lote[key]['total_doses'] += 1
+        por_lote[key]['custo_total'] += v.custo or 0
+        if v.vacina not in por_lote[key]['vacinas']:
+            por_lote[key]['vacinas'].append(v.vacina)
+
+    # Agrupado por plantel
+    por_plantel = {}
+    for v in vacinacoes:
+        if not v.plantel_brinco:
+            continue
+        key = v.plantel_brinco
+        if key not in por_plantel:
+            por_plantel[key] = {'brinco': key, 'total_doses': 0, 'custo_total': 0, 'registros': []}
+        por_plantel[key]['total_doses'] += 1
+        por_plantel[key]['custo_total'] += v.custo or 0
+        por_plantel[key]['registros'].append(v.to_dict())
+
+    # Agenda pendente
+    hoje = date.today()
+    pendentes = []
+    aplicacoes = AplicacaoPlano.query.all()
+    for ap in aplicacoes:
+        plano = PlanoVacinacao.query.get(ap.plano_id)
+        if not plano or not plano.ativo:
+            continue
+        lote = Lote.query.get(ap.lote_id) if ap.lote_id else None
+        for item in plano.itens:
+            data_prevista = ap.data_inicio + timedelta(days=item.dias_apos_entrada)
+            if data_prevista > hoje:
+                continue
+            ja_aplicada = Vacinacao.query.filter(
+                Vacinacao.lote_id == ap.lote_id if ap.lote_id else Vacinacao.plantel_brinco.isnot(None),
+                Vacinacao.vacina == item.vacina,
+                Vacinacao.data >= data_prevista - timedelta(days=5),
+                Vacinacao.data <= data_prevista + timedelta(days=5)
+            ).first() is not None
+            if not ja_aplicada:
+                pendentes.append({
+                    'vacina': item.vacina, 'dose': item.dose,
+                    'data_prevista': data_prevista.isoformat(),
+                    'dias_atraso': (hoje - data_prevista).days,
+                    'lote_numero': lote.numero if lote else None,
+                    'plantel_grupo': ap.plantel_grupo,
+                    'plano_nome': plano.nome,
+                })
+
+    return jsonify({
+        'total_doses': len(vacinacoes),
+        'custo_total': round(sum(v.custo or 0 for v in vacinacoes), 2),
+        'por_vacina': sorted(por_vacina.values(), key=lambda x: -x['total_doses']),
+        'por_lote': sorted(por_lote.values(), key=lambda x: -x['total_doses']),
+        'por_plantel': sorted(por_plantel.values(), key=lambda x: -x['total_doses']),
+        'pendentes_atrasadas': sorted(pendentes, key=lambda x: x['data_prevista']),
+        'historico': [v.to_dict() for v in vacinacoes],
+    })
 
 
 # ============== PLANO VACINACAO ROUTES ==============
@@ -2019,6 +2109,8 @@ def init_db():
             "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_grupo VARCHAR(20)",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS plantel_brinco VARCHAR(50)",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS custo FLOAT DEFAULT 0",
+            "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS marca_fabricante VARCHAR(100)",
+            "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS lote_vacina VARCHAR(50)",
         ]
         for sql in migrations:
             try:

@@ -14,7 +14,8 @@ const plantelGrupoLabel = { matrizes: '🐷 Matrizes', reprodutores: '🐗 Repro
 
 const emptyVacForm = {
   destino_tipo: 'lote', lote_id: '', animal_id: '', plantel_brinco: '',
-  vacina: '', data: today, dose: '', responsavel: '', custo: '', observacoes: ''
+  vacina: '', data: today, dose: '', marca_fabricante: '', lote_vacina: '',
+  responsavel: '', custo: '', observacoes: ''
 }
 const emptyPlanoForm = { nome: '', descricao: '', tipo_destino: 'lote', fase_lote: '', ativo: true }
 
@@ -34,6 +35,10 @@ export default function Sanidade() {
   const [vacForm, setVacForm] = useState(emptyVacForm)
   const [vacError, setVacError] = useState('')
   const [savingVac, setSavingVac] = useState(false)
+
+  // Relatório
+  const [relatorio, setRelatorio] = useState(null)
+  const [loadingRel, setLoadingRel] = useState(false)
 
   // Planos
   const [planos, setPlanos] = useState([])
@@ -72,7 +77,16 @@ export default function Sanidade() {
     }).finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [])
+  const loadRelatorio = () => {
+    setLoadingRel(true)
+    api.get('/api/relatorio-vacinacao')
+      .then(r => setRelatorio(r.data))
+      .finally(() => setLoadingRel(false))
+  }
+
+  useEffect(() => { if (tab === 'relatorio' && !relatorio) loadRelatorio() }, [tab])
+
+  useEffect(() => { load() }, [])  // eslint-disable-line
 
   // ---- Vacinação handlers ----
   const openCreateVac = (prefill = {}) => {
@@ -193,6 +207,7 @@ export default function Sanidade() {
           {tab === 'agenda' && canWrite() && <button className="btn btn-primary" onClick={openAplicar}>+ Aplicar Plano</button>}
           {tab === 'vacinacoes' && canWrite() && <button className="btn btn-primary" onClick={() => openCreateVac()}>+ Registrar Vacinação</button>}
           {tab === 'planos' && canWrite() && <button className="btn btn-primary" onClick={openCreatePlano}>+ Novo Plano</button>}
+          {tab === 'relatorio' && <button className="btn btn-outline" onClick={loadRelatorio}>🔄 Atualizar</button>}
         </div>
       </div>
 
@@ -226,6 +241,9 @@ export default function Sanidade() {
         </div>
         <div className={`tab ${tab === 'planos' ? 'active' : ''}`} onClick={() => setTab('planos')}>
           📄 Planos ({planos.length})
+        </div>
+        <div className={`tab ${tab === 'relatorio' ? 'active' : ''}`} onClick={() => setTab('relatorio')}>
+          📊 Relatório
         </div>
       </div>
 
@@ -334,12 +352,12 @@ export default function Sanidade() {
             <thead>
               <tr>
                 <th>Data</th><th>Vacina / Medicamento</th><th>Destino</th>
-                <th>Dose</th><th>Responsável</th><th>Custo</th><th>Obs.</th><th>Ações</th>
+                <th>Dose</th><th>Marca</th><th>Lote Vac.</th><th>Responsável</th><th>Custo</th><th>Ações</th>
               </tr>
             </thead>
             <tbody>
               {filteredVac.length === 0 ? (
-                <tr><td colSpan={8} className="table-empty"><span className="empty-icon">💉</span>Nenhuma vacinação registrada</td></tr>
+                <tr><td colSpan={10} className="table-empty"><span className="empty-icon">💉</span>Nenhuma vacinação registrada</td></tr>
               ) : filteredVac.map(v => (
                 <tr key={v.id}>
                   <td data-label="Data">{fmtData(v.data)}</td>
@@ -350,6 +368,8 @@ export default function Sanidade() {
                       : v.lote_numero || '-'}
                   </td>
                   <td data-label="Dose">{v.dose || '-'}</td>
+                  <td data-label="Marca">{v.marca_fabricante || '-'}</td>
+                  <td data-label="Lote Vac.">{v.lote_vacina || '-'}</td>
                   <td data-label="Responsável">{v.responsavel || '-'}</td>
                   <td data-label="Custo">{v.custo ? fmtMoeda(v.custo) : '-'}</td>
                   <td data-label="Obs.">{v.observacoes || '-'}</td>
@@ -421,6 +441,153 @@ export default function Sanidade() {
         </div>
       )}
 
+      {/* ===== ABA RELATÓRIO ===== */}
+      {tab === 'relatorio' && (
+        <div>
+          {loadingRel ? (
+            <div className="loading"><div className="spinner" /> Carregando relatório...</div>
+          ) : !relatorio ? (
+            <div className="table-container">
+              <div className="table-empty"><span className="empty-icon">📊</span>Clique em Atualizar para gerar o relatório</div>
+            </div>
+          ) : (
+            <>
+              {/* Resumo geral */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+                <div className="stat-card" style={{ flex: 1, minWidth: 140 }}>
+                  <div className="stat-icon blue">💉</div>
+                  <div><div className="stat-value">{relatorio.total_doses}</div><div className="stat-label">Total de doses</div></div>
+                </div>
+                <div className="stat-card" style={{ flex: 1, minWidth: 140 }}>
+                  <div className="stat-icon orange">💰</div>
+                  <div><div className="stat-value" style={{ fontSize: 14 }}>{fmtMoeda(relatorio.custo_total)}</div><div className="stat-label">Custo total</div></div>
+                </div>
+                <div className="stat-card" style={{ flex: 1, minWidth: 140 }}>
+                  <div className="stat-icon red">⚠️</div>
+                  <div><div className="stat-value">{relatorio.pendentes_atrasadas.length}</div><div className="stat-label">Atrasadas</div></div>
+                </div>
+              </div>
+
+              {/* Pendentes/atrasadas */}
+              {relatorio.pendentes_atrasadas.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#dc3545', marginBottom: 10 }}>🔴 Vacinações Atrasadas</h3>
+                  <div className="table-container">
+                    <table>
+                      <thead><tr><th>Vacina</th><th>Destino</th><th>Plano</th><th>Data Prevista</th><th>Atraso</th></tr></thead>
+                      <tbody>
+                        {relatorio.pendentes_atrasadas.map((p, i) => (
+                          <tr key={i}>
+                            <td data-label="Vacina"><strong>{p.vacina}</strong>{p.dose && <span style={{ fontSize: 12, color: '#6c757d' }}> · {p.dose}</span>}</td>
+                            <td data-label="Destino">{p.plantel_grupo ? <span className="badge badge-purple">{plantelGrupoLabel[p.plantel_grupo]}</span> : p.lote_numero}</td>
+                            <td data-label="Plano">{p.plano_nome}</td>
+                            <td data-label="Prevista">{fmtData(p.data_prevista)}</td>
+                            <td data-label="Atraso"><span className="badge badge-red">{p.dias_atraso} dia(s)</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Por vacina */}
+              <div style={{ marginBottom: 24 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>💉 Resumo por Vacina</h3>
+                <div className="table-container">
+                  <table>
+                    <thead><tr><th>Vacina</th><th>Doses Aplicadas</th><th>Custo Total</th><th>Custo Médio/Dose</th></tr></thead>
+                    <tbody>
+                      {relatorio.por_vacina.map((v, i) => (
+                        <tr key={i}>
+                          <td data-label="Vacina"><strong>{v.vacina}</strong></td>
+                          <td data-label="Doses">{v.total_doses}</td>
+                          <td data-label="Custo Total">{fmtMoeda(v.custo_total)}</td>
+                          <td data-label="Custo Médio">{fmtMoeda(v.total_doses ? v.custo_total / v.total_doses : 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Por lote */}
+              {relatorio.por_lote.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>🐖 Vacinações por Lote</h3>
+                  <div className="table-container">
+                    <table>
+                      <thead><tr><th>Lote</th><th>Doses</th><th>Vacinas</th><th>Custo Total</th></tr></thead>
+                      <tbody>
+                        {relatorio.por_lote.map((l, i) => (
+                          <tr key={i}>
+                            <td data-label="Lote"><strong>{l.lote_numero}</strong></td>
+                            <td data-label="Doses">{l.total_doses}</td>
+                            <td data-label="Vacinas" style={{ fontSize: 12 }}>{l.vacinas.join(', ')}</td>
+                            <td data-label="Custo">{fmtMoeda(l.custo_total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Por plantel */}
+              {relatorio.por_plantel.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>🐷 Vacinações do Plantel</h3>
+                  <div className="table-container">
+                    <table>
+                      <thead><tr><th>Animal (Brinco)</th><th>Doses</th><th>Custo Total</th></tr></thead>
+                      <tbody>
+                        {relatorio.por_plantel.map((p, i) => (
+                          <tr key={i}>
+                            <td data-label="Animal"><strong>🐷 {p.brinco}</strong></td>
+                            <td data-label="Doses">{p.total_doses}</td>
+                            <td data-label="Custo">{fmtMoeda(p.custo_total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Histórico completo */}
+              <div>
+                <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>📋 Histórico Completo</h3>
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr><th>Data</th><th>Vacina</th><th>Destino</th><th>Dose</th><th>Marca</th><th>Lote Vacina</th><th>Responsável</th><th>Custo</th></tr>
+                    </thead>
+                    <tbody>
+                      {relatorio.historico.length === 0 ? (
+                        <tr><td colSpan={8} className="table-empty">Nenhum registro</td></tr>
+                      ) : relatorio.historico.map(v => (
+                        <tr key={v.id}>
+                          <td data-label="Data">{fmtData(v.data)}</td>
+                          <td data-label="Vacina"><strong>{v.vacina}</strong></td>
+                          <td data-label="Destino">
+                            {v.plantel_brinco ? <span className="badge badge-purple">🐷 {v.plantel_brinco}</span> : v.lote_numero || '-'}
+                          </td>
+                          <td data-label="Dose">{v.dose || '-'}</td>
+                          <td data-label="Marca">{v.marca_fabricante || '-'}</td>
+                          <td data-label="Lote Vac.">{v.lote_vacina || '-'}</td>
+                          <td data-label="Responsável">{v.responsavel || '-'}</td>
+                          <td data-label="Custo">{v.custo ? fmtMoeda(v.custo) : '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ===== MODAL VACINAÇÃO ===== */}
       {showVacModal && (
         <Modal title={editingVac ? 'Editar Vacinação' : 'Registrar Vacinação'}
@@ -481,6 +648,16 @@ export default function Sanidade() {
             <div className="form-group">
               <label>Dose</label>
               <input value={vacForm.dose} onChange={e => setVF('dose', e.target.value)} placeholder="Ex: 2ml, 1ª dose" />
+            </div>
+            <div className="form-group">
+              <label>Marca / Fabricante</label>
+              <input value={vacForm.marca_fabricante} onChange={e => setVF('marca_fabricante', e.target.value)}
+                placeholder="Ex: Zoetis, MSD, Boehringer..." />
+            </div>
+            <div className="form-group">
+              <label>Lote da Vacina</label>
+              <input value={vacForm.lote_vacina} onChange={e => setVF('lote_vacina', e.target.value)}
+                placeholder="Nº do lote da embalagem" />
             </div>
             <div className="form-group">
               <label>Responsável</label>
