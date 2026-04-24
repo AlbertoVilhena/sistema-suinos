@@ -321,15 +321,15 @@ export default function Relatorios() {
               <p style={{ color: '#495057', fontSize: 13, marginBottom: 12 }}>{l.justificativa}</p>
 
               {/* Métricas em grid 2x2 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
                 {[
                   { label: 'Animais', value: l.qtd_animais },
                   { label: 'Peso médio', value: `${fmtNum(l.peso_medio_atual)} kg` },
                   { label: 'Ganho/dia', value: `${fmtNum(l.ganho_diario_medio, 3)} kg` },
                   { label: 'Dias prod.', value: l.dias_em_producao },
-                  { label: 'Custo total', value: fmtMoeda(l.custo_total) },
+                  { label: 'Peso total est.', value: `${fmtNum(l.peso_total_kg, 1)} kg` },
                   { label: 'Custo/kg', value: `${fmtMoeda(l.custo_por_kg)}/kg` },
-                  { label: 'Preço mín.', value: `${fmtMoeda(l.preco_minimo_lucro)}/kg` },
+                  { label: 'Custo total', value: fmtMoeda(l.custo_total) },
                   { label: 'Dias p/ alvo', value: l.dias_para_peso_alvo > 0 ? `~${l.dias_para_peso_alvo}d` : l.dias_para_peso_alvo === 0 ? '✅ atingido' : '—' },
                 ].map((m, i) => (
                   <div key={i} style={{ background: '#f8f9fa', borderRadius: 6, padding: '8px 10px' }}>
@@ -337,6 +337,33 @@ export default function Relatorios() {
                     <div style={{ fontWeight: 600, fontSize: 13, color: '#212529', marginTop: 2 }}>{m.value}</div>
                   </div>
                 ))}
+              </div>
+
+              {/* Seção: Valor Mínimo de Venda */}
+              <div style={{ background: '#f0f7ff', border: '1px solid #b6d4fe', borderRadius: 8, padding: '12px 14px', marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#0d6efd', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
+                  💰 Valor Mínimo de Venda — baseado no peso atual do lote
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+                  {[
+                    { label: 'Equilíbrio (0%)', sublabel: 'Só cobre os custos', price: l.preco_breakeven, receita: l.receita_breakeven, lucro: 0, color: '#6c757d', bg: '#f8f9fa' },
+                    { label: 'Mínimo (15%)', sublabel: 'Margem mínima recomendada', price: l.preco_minimo_lucro, receita: l.receita_minima, lucro: l.lucro_minimo, color: '#fd7e14', bg: '#fff8f0' },
+                    { label: 'Recomendado (25%)', sublabel: 'Meta de rentabilidade', price: l.preco_recomendado, receita: l.receita_recomendada, lucro: l.lucro_recomendado, color: '#198754', bg: '#f0fff4' },
+                  ].map((p, i) => (
+                    <div key={i} style={{ background: p.bg, border: `1px solid ${p.color}33`, borderRadius: 8, padding: '10px 10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: p.color, textTransform: 'uppercase', marginBottom: 4 }}>{p.label}</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: p.color }}>{fmtMoeda(p.price)}<span style={{ fontSize: 11, fontWeight: 400 }}>/kg</span></div>
+                      <div style={{ fontSize: 11, color: '#495057', marginTop: 6, borderTop: `1px solid ${p.color}22`, paddingTop: 6 }}>
+                        <div>Receita: <strong>{fmtMoeda(p.receita)}</strong></div>
+                        {i > 0 && <div style={{ color: '#198754', fontWeight: 600 }}>Lucro: +{fmtMoeda(p.lucro)}</div>}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#6c757d', marginTop: 4 }}>{p.sublabel}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: '#6c757d', fontStyle: 'italic' }}>
+                  * Cálculo baseado em {fmtNum(l.peso_total_kg, 1)} kg estimados ({l.qtd_animais} animais × {fmtNum(l.peso_medio_atual)} kg/animal). Custos considerados: ração, sanidade e aquisição.
+                </div>
               </div>
 
               {l.alertas?.length > 0 && (

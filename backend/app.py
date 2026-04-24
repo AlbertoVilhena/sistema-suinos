@@ -2210,8 +2210,17 @@ def analise_venda():
             dias_para_alvo = max(0, round((peso_alvo - peso_medio) / ganho_diario)) if peso_medio < peso_alvo else 0
             txt_estimativa = f'~{dias_para_alvo} dias para atingir {peso_alvo} kg.' if dias_para_alvo > 0 else 'Peso de abate atingido!'
 
-        # Preço mínimo para lucro (margem 20%)
-        preco_minimo = round(custo_por_kg * 1.2, 2)
+        # Preço mínimo de venda
+        preco_breakeven = round(custo_por_kg, 2)           # Só cobre custos
+        preco_minimo = round(custo_por_kg * 1.15, 2)       # Margem 15%
+        preco_recomendado = round(custo_por_kg * 1.25, 2)  # Margem 25%
+
+        # Receita e lucro estimados pelo peso atual do lote
+        receita_breakeven = round(preco_breakeven * peso_total_kg, 2)
+        receita_minima = round(preco_minimo * peso_total_kg, 2)
+        receita_recomendada = round(preco_recomendado * peso_total_kg, 2)
+        lucro_minimo = round(receita_minima - custo_total, 2)
+        lucro_recomendado = round(receita_recomendada - custo_total, 2)
 
         # ===== LÓGICA DE RECOMENDAÇÃO =====
         alertas = []
@@ -2273,7 +2282,15 @@ def analise_venda():
             'total_pesagens': len(pesagens_lote),
             'custo_total': round(custo_total, 2),
             'custo_por_kg': custo_por_kg,
+            'peso_total_kg': round(peso_total_kg, 1),
+            'preco_breakeven': preco_breakeven,
             'preco_minimo_lucro': preco_minimo,
+            'preco_recomendado': preco_recomendado,
+            'receita_breakeven': receita_breakeven,
+            'receita_minima': receita_minima,
+            'receita_recomendada': receita_recomendada,
+            'lucro_minimo': lucro_minimo,
+            'lucro_recomendado': lucro_recomendado,
             'recomendacao': recomendacao,
             'icone_recomendacao': icone,
             'cor_recomendacao': cor,
