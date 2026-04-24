@@ -102,47 +102,50 @@ export default function Sanidade() {
       const res = await api.get('/api/agenda-vacinacao?completa=true')
       const agendaCompleta = res.data
 
-      const plantelGrupoLabelMap = { matrizes: '🐷 Matrizes', reprodutores: '🐗 Reprodutores', geral: '🐖 Plantel Geral' }
-      const statusLabel = { atrasada: '🔴 Atrasada', proxima: '🟡 Esta semana', futura: '📅 Programada' }
-      const statusColor = { atrasada: '#dc3545', proxima: '#fd7e14', futura: '#0d6efd' }
+      const plantelGrupoLabelMap = { matrizes: 'Matrizes', reprodutores: 'Reprodutores', geral: 'Plantel Geral' }
 
       const hoje = new Date().toLocaleDateString('pt-BR')
-      const grupos = ['atrasada', 'proxima', 'futura']
-      const titulosGrupo = {
-        atrasada: '🔴 ATRASADAS',
-        proxima: '🟡 ESTA SEMANA (próximos 7 dias)',
-        futura: '📅 PROGRAMADAS',
-      }
+      const nAtrasadas = agendaCompleta.filter(a => a.status === 'atrasada').length
+      const nProximas  = agendaCompleta.filter(a => a.status === 'proxima').length
+      const nFuturas   = agendaCompleta.filter(a => a.status === 'futura').length
 
-      const linhasHTML = (itens) => itens.map((a, i) => {
+      const fmtDate = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR')
+
+      const linhasHTML = (itens, cor) => itens.map((a, i) => {
         const destino = a.plantel_grupo
           ? plantelGrupoLabelMap[a.plantel_grupo] || a.plantel_grupo
           : (a.lote_numero ? `Lote ${a.lote_numero}` : '-')
-        const dataFmt = new Date(a.data_prevista + 'T00:00:00').toLocaleDateString('pt-BR')
-        const diasTexto = a.dias_diff < 0
-          ? `${Math.abs(a.dias_diff)}d atrasada`
-          : a.dias_diff === 0 ? 'Hoje' : `em ${a.dias_diff}d`
-        return `
-          <tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
-            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef">${dataFmt}</td>
-            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef;font-weight:600">${a.vacina}</td>
-            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef">${a.dose || '-'}</td>
-            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef">${destino}</td>
-            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef">${a.plano_nome}</td>
-            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef;color:${statusColor[a.status]};font-weight:600">${diasTexto}</td>
-            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef"></td>
-          </tr>`
+        const diasAbs = Math.abs(a.dias_diff)
+        const situacao = a.dias_diff < 0
+          ? `<span style="color:#c0392b;font-weight:700">${diasAbs} dia${diasAbs > 1 ? 's' : ''} em atraso</span>`
+          : a.dias_diff === 0
+            ? `<span style="color:#d68910;font-weight:700">Hoje</span>`
+            : `<span style="color:#1a5276">Em ${a.dias_diff} dia${a.dias_diff > 1 ? 's' : ''}</span>`
+        return `<tr style="background:${i % 2 === 0 ? '#fff' : '#fafafa'}">
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;white-space:nowrap">${fmtDate(a.data_prevista)}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;font-weight:600">${a.vacina}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;white-space:nowrap">${a.dose || '-'}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee">${destino}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555">${a.plano_nome}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee">${situacao}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center">
+            <span style="display:inline-block;width:18px;height:18px;border:2px solid #aaa;border-radius:3px"></span>
+          </td>
+        </tr>`
       }).join('')
 
-      const secoes = grupos.map(g => {
-        const itens = agendaCompleta.filter(a => a.status === g)
+      const secaoHTML = (status, titulo, corFundo, corBorda, corTexto) => {
+        const itens = agendaCompleta.filter(a => a.status === status)
         if (itens.length === 0) return ''
         return `
-          <tr><td colspan="7" style="padding:14px 10px 6px;font-weight:700;font-size:14px;color:${statusColor[g]};background:#f8f9fa;border-top:2px solid ${statusColor[g]}">
-            ${titulosGrupo[g]} &nbsp;(${itens.length})
-          </td></tr>
-          ${linhasHTML(itens)}`
-      }).join('')
+        <tr>
+          <td colspan="7" style="padding:14px 12px 8px 12px;background:${corFundo};border-left:5px solid ${corBorda};border-top:12px solid #fff">
+            <span style="font-weight:700;font-size:13px;color:${corTexto}">${titulo}</span>
+            <span style="margin-left:8px;background:${corBorda};color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${itens.length}</span>
+          </td>
+        </tr>
+        ${linhasHTML(itens, corBorda)}`
+      }
 
       const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -150,53 +153,90 @@ export default function Sanidade() {
   <meta charset="UTF-8">
   <title>Agenda de Vacinação — GranjaApp</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; font-size: 13px; color: #333; padding: 24px; }
-    h1 { font-size: 20px; color: #1b5e20; margin-bottom: 4px; }
-    .subtitle { color: #555; font-size: 13px; margin-bottom: 20px; }
-    table { width: 100%; border-collapse: collapse; }
-    thead tr { background: #1b5e20; color: #fff; }
-    thead td { padding: 10px; font-weight: 700; font-size: 12px; text-transform: uppercase; }
-    .assinatura { margin-top: 40px; display: flex; gap: 60px; flex-wrap: wrap; }
-    .assinatura div { border-top: 1px solid #333; padding-top: 6px; min-width: 200px; font-size: 12px; color: #555; }
-    .empty { text-align: center; padding: 40px; color: #888; }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size:12px; color:#222; padding:28px 32px; }
     @media print {
-      body { padding: 12px; }
-      button { display: none !important; }
-      @page { margin: 15mm; size: A4; }
+      body { padding:0; }
+      button { display:none !important; }
+      @page { margin:15mm 15mm 20mm; size:A4; }
     }
   </style>
 </head>
 <body>
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+
+  <!-- CABEÇALHO -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:14px;border-bottom:3px solid #1b5e20">
     <div>
-      <h1>🐖 GranjaApp — Agenda de Vacinação</h1>
-      <div class="subtitle">Gerado em: ${hoje} &nbsp;|&nbsp; Total: ${agendaCompleta.length} vacinação(ões) programada(s)</div>
+      <div style="font-size:22px;font-weight:700;color:#1b5e20;margin-bottom:3px">Agenda de Vacinacao — GranjaApp</div>
+      <div style="font-size:11px;color:#666">Gerado em: <strong>${hoje}</strong></div>
     </div>
-    <button onclick="window.print()" style="padding:8px 18px;background:#1b5e20;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
+    <button onclick="window.print()" style="padding:9px 20px;background:#1b5e20;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">
+      Imprimir / Salvar PDF
+    </button>
   </div>
 
-  ${agendaCompleta.length === 0 ? '<div class="empty">Nenhuma vacinação programada no momento.</div>' : `
-  <table>
+  <!-- RESUMO -->
+  <div style="display:flex;gap:14px;margin-bottom:24px">
+    <div style="flex:1;border:1px solid #e0e0e0;border-radius:8px;padding:12px 16px;border-top:4px solid #e74c3c">
+      <div style="font-size:28px;font-weight:700;color:#c0392b">${nAtrasadas}</div>
+      <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Atrasadas</div>
+    </div>
+    <div style="flex:1;border:1px solid #e0e0e0;border-radius:8px;padding:12px 16px;border-top:4px solid #f39c12">
+      <div style="font-size:28px;font-weight:700;color:#d68910">${nProximas}</div>
+      <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Esta semana</div>
+    </div>
+    <div style="flex:1;border:1px solid #e0e0e0;border-radius:8px;padding:12px 16px;border-top:4px solid #2980b9">
+      <div style="font-size:28px;font-weight:700;color:#1a5276">${nFuturas}</div>
+      <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Programadas</div>
+    </div>
+    <div style="flex:1;border:1px solid #e0e0e0;border-radius:8px;padding:12px 16px;border-top:4px solid #1b5e20">
+      <div style="font-size:28px;font-weight:700;color:#1b5e20">${agendaCompleta.length}</div>
+      <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Total</div>
+    </div>
+  </div>
+
+  ${agendaCompleta.length === 0
+    ? `<div style="text-align:center;padding:60px;color:#888;border:2px dashed #ddd;border-radius:8px">
+        Nenhuma vacinacao programada no momento.
+       </div>`
+    : `
+  <!-- TABELA -->
+  <table style="width:100%;border-collapse:collapse">
     <thead>
-      <tr>
-        <td>Data</td>
-        <td>Vacina / Medicamento</td>
-        <td>Dose</td>
-        <td>Destino</td>
-        <td>Plano</td>
-        <td>Situação</td>
-        <td>✓ Aplicada</td>
+      <tr style="background:#1b5e20;color:#fff">
+        <th style="padding:10px 10px;font-size:11px;font-weight:700;text-align:left;width:10%">Data</th>
+        <th style="padding:10px 10px;font-size:11px;font-weight:700;text-align:left;width:24%">Vacina / Medicamento</th>
+        <th style="padding:10px 10px;font-size:11px;font-weight:700;text-align:left;width:8%">Dose</th>
+        <th style="padding:10px 10px;font-size:11px;font-weight:700;text-align:left;width:16%">Destino</th>
+        <th style="padding:10px 10px;font-size:11px;font-weight:700;text-align:left;width:22%">Plano Vacinacional</th>
+        <th style="padding:10px 10px;font-size:11px;font-weight:700;text-align:left;width:14%">Situacao</th>
+        <th style="padding:10px 10px;font-size:11px;font-weight:700;text-align:center;width:6%">Feita</th>
       </tr>
     </thead>
-    <tbody>${secoes}</tbody>
+    <tbody>
+      ${secaoHTML('atrasada', 'ATRASADAS', '#fff5f5', '#c0392b', '#c0392b')}
+      ${secaoHTML('proxima',  'ESTA SEMANA', '#fffbf0', '#f39c12', '#d68910')}
+      ${secaoHTML('futura',   'PROGRAMADAS', '#f0f6ff', '#2980b9', '#1a5276')}
+    </tbody>
   </table>
 
-  <div class="assinatura">
-    <div>Responsável técnico / Veterinário</div>
-    <div>Responsável pela aplicação</div>
-    <div>Data de conferência</div>
-  </div>`}
+  <!-- ASSINATURAS -->
+  <div style="margin-top:44px;display:flex;gap:28px">
+    <div style="flex:1">
+      <div style="border-top:1px solid #555;margin-bottom:6px"></div>
+      <div style="font-size:11px;color:#555">Responsavel tecnico / Veterinario</div>
+    </div>
+    <div style="flex:1">
+      <div style="border-top:1px solid #555;margin-bottom:6px"></div>
+      <div style="font-size:11px;color:#555">Responsavel pela aplicacao</div>
+    </div>
+    <div style="flex:1">
+      <div style="border-top:1px solid #555;margin-bottom:6px"></div>
+      <div style="font-size:11px;color:#555">Data de conferencia</div>
+    </div>
+  </div>
+  `}
+
 </body>
 </html>`
 
