@@ -90,6 +90,14 @@ export default function Sanidade() {
 
   // ---- PDF Agenda ----
   const gerarPDFAgenda = async () => {
+    // Abre a janela ANTES do await — browsers bloqueiam window.open() após chamadas assíncronas
+    const win = window.open('', '_blank')
+    if (!win) {
+      alert('Pop-up bloqueado pelo navegador.\nPermita pop-ups para este site e tente novamente.')
+      return
+    }
+    win.document.write('<html><body style="font-family:Arial;padding:40px;text-align:center;color:#555"><p style="font-size:18px">⏳ Gerando agenda de vacinação...</p></body></html>')
+
     try {
       const res = await api.get('/api/agenda-vacinacao?completa=true')
       const agendaCompleta = res.data
@@ -192,12 +200,13 @@ export default function Sanidade() {
 </body>
 </html>`
 
-      const win = window.open('', '_blank')
+      win.document.open()
       win.document.write(html)
       win.document.close()
-      setTimeout(() => win.print(), 500)
+      setTimeout(() => win.print(), 600)
     } catch (e) {
-      alert('Erro ao gerar PDF da agenda')
+      win.close()
+      alert('Erro ao gerar PDF da agenda: ' + (e.response?.data?.error || e.message || 'Tente novamente'))
     }
   }
 
