@@ -989,11 +989,16 @@ textarea {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    flex-wrap: nowrap;
     gap: 0;
-    flex-shrink: 0;
   }
   .tabs::-webkit-scrollbar { display: none; }
-  .tab { padding: 10px 14px; font-size: 13px; white-space: nowrap; }
+  .tab {
+    padding: 10px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
 
   /* ---- Bar chart (Relatórios) ---- */
   .bar-label { width: 80px; font-size: 11px; }
