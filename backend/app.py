@@ -1130,6 +1130,7 @@ def delete_aplicacao_plano(aid):
 @jwt_required()
 def get_agenda_vacinacao():
     hoje = date.today()
+    completa = request.args.get('completa', 'false').lower() == 'true'
     aplicacoes = AplicacaoPlano.query.all()
     agenda = []
 
@@ -1153,7 +1154,6 @@ def get_agenda_vacinacao():
                     Vacinacao.data <= data_prevista + timedelta(days=5)
                 ).first() is not None
             elif ap.plantel_grupo:
-                # Para plantel_grupo, verifica se há registro com plantel_brinco de qualquer animal do grupo
                 ja_aplicada = Vacinacao.query.filter(
                     Vacinacao.plantel_brinco.isnot(None),
                     Vacinacao.vacina == item.vacina,
@@ -1170,8 +1170,13 @@ def get_agenda_vacinacao():
             else:
                 status = 'futura'
 
-            # Só retorna pendentes e próximas (não mostra futuro distante nem aplicadas)
-            if status in ('atrasada', 'proxima'):
+            # Modo completo (PDF): inclui futuras. Modo normal: só atrasadas e próximas
+            if completa:
+                incluir = status != 'aplicada'
+            else:
+                incluir = status in ('atrasada', 'proxima')
+
+            if incluir:
                 agenda.append({
                     'aplicacao_id': ap.id,
                     'plano_id': plano.id,

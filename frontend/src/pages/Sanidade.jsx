@@ -88,6 +88,119 @@ export default function Sanidade() {
 
   useEffect(() => { load() }, [])  // eslint-disable-line
 
+  // ---- PDF Agenda ----
+  const gerarPDFAgenda = async () => {
+    try {
+      const res = await api.get('/api/agenda-vacinacao?completa=true')
+      const agendaCompleta = res.data
+
+      const plantelGrupoLabelMap = { matrizes: '🐷 Matrizes', reprodutores: '🐗 Reprodutores', geral: '🐖 Plantel Geral' }
+      const statusLabel = { atrasada: '🔴 Atrasada', proxima: '🟡 Esta semana', futura: '📅 Programada' }
+      const statusColor = { atrasada: '#dc3545', proxima: '#fd7e14', futura: '#0d6efd' }
+
+      const hoje = new Date().toLocaleDateString('pt-BR')
+      const grupos = ['atrasada', 'proxima', 'futura']
+      const titulosGrupo = {
+        atrasada: '🔴 ATRASADAS',
+        proxima: '🟡 ESTA SEMANA (próximos 7 dias)',
+        futura: '📅 PROGRAMADAS',
+      }
+
+      const linhasHTML = (itens) => itens.map((a, i) => {
+        const destino = a.plantel_grupo
+          ? plantelGrupoLabelMap[a.plantel_grupo] || a.plantel_grupo
+          : (a.lote_numero ? `Lote ${a.lote_numero}` : '-')
+        const dataFmt = new Date(a.data_prevista + 'T00:00:00').toLocaleDateString('pt-BR')
+        const diasTexto = a.dias_diff < 0
+          ? `${Math.abs(a.dias_diff)}d atrasada`
+          : a.dias_diff === 0 ? 'Hoje' : `em ${a.dias_diff}d`
+        return `
+          <tr style="background:${i % 2 === 0 ? '#fff' : '#f9f9f9'}">
+            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef">${dataFmt}</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef;font-weight:600">${a.vacina}</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef">${a.dose || '-'}</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef">${destino}</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef">${a.plano_nome}</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef;color:${statusColor[a.status]};font-weight:600">${diasTexto}</td>
+            <td style="padding:8px 10px;border-bottom:1px solid #e9ecef"></td>
+          </tr>`
+      }).join('')
+
+      const secoes = grupos.map(g => {
+        const itens = agendaCompleta.filter(a => a.status === g)
+        if (itens.length === 0) return ''
+        return `
+          <tr><td colspan="7" style="padding:14px 10px 6px;font-weight:700;font-size:14px;color:${statusColor[g]};background:#f8f9fa;border-top:2px solid ${statusColor[g]}">
+            ${titulosGrupo[g]} &nbsp;(${itens.length})
+          </td></tr>
+          ${linhasHTML(itens)}`
+      }).join('')
+
+      const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Agenda de Vacinação — GranjaApp</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 13px; color: #333; padding: 24px; }
+    h1 { font-size: 20px; color: #1b5e20; margin-bottom: 4px; }
+    .subtitle { color: #555; font-size: 13px; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #1b5e20; color: #fff; }
+    thead td { padding: 10px; font-weight: 700; font-size: 12px; text-transform: uppercase; }
+    .assinatura { margin-top: 40px; display: flex; gap: 60px; flex-wrap: wrap; }
+    .assinatura div { border-top: 1px solid #333; padding-top: 6px; min-width: 200px; font-size: 12px; color: #555; }
+    .empty { text-align: center; padding: 40px; color: #888; }
+    @media print {
+      body { padding: 12px; }
+      button { display: none !important; }
+      @page { margin: 15mm; size: A4; }
+    }
+  </style>
+</head>
+<body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+    <div>
+      <h1>🐖 GranjaApp — Agenda de Vacinação</h1>
+      <div class="subtitle">Gerado em: ${hoje} &nbsp;|&nbsp; Total: ${agendaCompleta.length} vacinação(ões) programada(s)</div>
+    </div>
+    <button onclick="window.print()" style="padding:8px 18px;background:#1b5e20;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨️ Imprimir / Salvar PDF</button>
+  </div>
+
+  ${agendaCompleta.length === 0 ? '<div class="empty">Nenhuma vacinação programada no momento.</div>' : `
+  <table>
+    <thead>
+      <tr>
+        <td>Data</td>
+        <td>Vacina / Medicamento</td>
+        <td>Dose</td>
+        <td>Destino</td>
+        <td>Plano</td>
+        <td>Situação</td>
+        <td>✓ Aplicada</td>
+      </tr>
+    </thead>
+    <tbody>${secoes}</tbody>
+  </table>
+
+  <div class="assinatura">
+    <div>Responsável técnico / Veterinário</div>
+    <div>Responsável pela aplicação</div>
+    <div>Data de conferência</div>
+  </div>`}
+</body>
+</html>`
+
+      const win = window.open('', '_blank')
+      win.document.write(html)
+      win.document.close()
+      setTimeout(() => win.print(), 500)
+    } catch (e) {
+      alert('Erro ao gerar PDF da agenda')
+    }
+  }
+
   // ---- Vacinação handlers ----
   const openCreateVac = (prefill = {}) => {
     setEditingVac(null)
@@ -204,7 +317,12 @@ export default function Sanidade() {
           <p>Vacinações, tratamentos e plano vacinacional</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {tab === 'agenda' && canWrite() && <button className="btn btn-primary" onClick={openAplicar}>+ Aplicar Plano</button>}
+          {tab === 'agenda' && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-outline" onClick={gerarPDFAgenda}>📄 Gerar PDF</button>
+              {canWrite() && <button className="btn btn-primary" onClick={openAplicar}>+ Aplicar Plano</button>}
+            </div>
+          )}
           {tab === 'vacinacoes' && canWrite() && <button className="btn btn-primary" onClick={() => openCreateVac()}>+ Registrar Vacinação</button>}
           {tab === 'planos' && canWrite() && <button className="btn btn-primary" onClick={openCreatePlano}>+ Novo Plano</button>}
           {tab === 'relatorio' && <button className="btn btn-outline" onClick={loadRelatorio}>🔄 Atualizar</button>}
