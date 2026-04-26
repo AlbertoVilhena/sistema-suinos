@@ -229,6 +229,7 @@ class Alimentacao(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     lote_id = db.Column(db.Integer, db.ForeignKey('lotes.id'), nullable=True)
     plantel_grupo = db.Column(db.String(20))  # matrizes, reprodutores, geral
+    plantel_brinco = db.Column(db.String(50))  # controle individual de animal do plantel
     formulacao_id = db.Column(db.Integer, db.ForeignKey('formulacoes.id'), nullable=True)
     data = db.Column(db.Date, nullable=False)
     racao_tipo = db.Column(db.String(100))
@@ -240,12 +241,15 @@ class Alimentacao(db.Model):
     def to_dict(self):
         lote = Lote.query.get(self.lote_id) if self.lote_id else None
         custo_total = (self.quantidade_kg * self.custo_unitario) if self.custo_unitario else 0
+        formulacao = Formulacao.query.get(self.formulacao_id) if self.formulacao_id else None
         return {
             'id': self.id,
             'formulacao_id': self.formulacao_id,
+            'formulacao_nome': formulacao.nome if formulacao else None,
             'lote_id': self.lote_id,
             'lote_numero': lote.numero if lote else None,
             'plantel_grupo': self.plantel_grupo,
+            'plantel_brinco': self.plantel_brinco,
             'data': self.data.isoformat() if self.data else None,
             'racao_tipo': self.racao_tipo,
             'quantidade_kg': self.quantidade_kg,
@@ -1305,8 +1309,8 @@ def create_alimentacao():
     data = request.get_json()
     if not data.get('data') or not data.get('quantidade_kg'):
         return jsonify({'error': 'Data e quantidade são obrigatórios'}), 400
-    if not data.get('lote_id') and not data.get('plantel_grupo'):
-        return jsonify({'error': 'Selecione um lote ou um grupo do plantel'}), 400
+    if not data.get('lote_id') and not data.get('plantel_grupo') and not data.get('plantel_brinco'):
+        return jsonify({'error': 'Selecione um lote, um grupo do plantel ou um animal individual'}), 400
 
     formulacao_id = to_int(data.get('formulacao_id'))
     custo_unitario = to_float(data.get('custo_unitario'))
@@ -1319,6 +1323,7 @@ def create_alimentacao():
     alim = Alimentacao(
         lote_id=to_int(data.get('lote_id')),
         plantel_grupo=data.get('plantel_grupo') or None,
+        plantel_brinco=data.get('plantel_brinco') or None,
         formulacao_id=formulacao_id,
         data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
         racao_tipo=data.get('racao_tipo'),
@@ -1341,7 +1346,7 @@ def update_alimentacao(aid):
     alim = Alimentacao.query.get_or_404(aid)
     data = request.get_json()
 
-    for f in ['racao_tipo', 'quantidade_kg', 'custo_unitario', 'observacoes', 'lote_id', 'plantel_grupo']:
+    for f in ['racao_tipo', 'quantidade_kg', 'custo_unitario', 'observacoes', 'lote_id', 'plantel_grupo', 'plantel_brinco']:
         if f in data:
             setattr(alim, f, data[f] if data[f] != '' else None)
     if 'data' in data:
@@ -1362,6 +1367,60 @@ def delete_alimentacao(aid):
     db.session.delete(alim)
     db.session.commit()
     return jsonify({'message': 'Registro excluído com sucesso'})
+
+
+def get_fase_reprodutiva(brinco):
+    """Determina a fase reprodutiva atual de uma matriz pelo brinco."""
+    today = date.today()
+    repro = Reproducao.query.filter_by(femea_brinco=brinco).order_by(Reproducao.id.desc()).first()
+    if not repro:
+        return 'vazia'
+    if repro.status == 'gestacao':
+        if repro.data_parto_previsto:
+            dias_para_parto = (repro.data_parto_previsto - today).days
+            if dias_para_parto <= 10:
+                return 'pre_parto'
+        return 'gestacao'
+    if repro.status in ('parto', 'desmame'):
+        if repro.data_parto_real:
+            dias_apos_parto = (today - repro.data_parto_real).days
+            if dias_apos_parto <= 35:
+                return 'lactacao'
+    return 'vazia'
+
+
+@app.route('/api/alimentacoes/consumo-individual', methods=['GET'])
+@jwt_required()
+def consumo_individual_plantel():
+    """Retorna resumo de consumo de ração por animal individual do plantel."""
+    alims = Alimentacao.query.filter(Alimentacao.plantel_brinco.isnot(None)).all()
+    por_animal = {}
+    for a in alims:
+        b = a.plantel_brinco
+        if b not in por_animal:
+            plantel = Plantel.query.filter_by(brinco=b).first()
+            por_animal[b] = {
+                'brinco': b,
+                'nome': plantel.nome if plantel else '',
+                'tipo': plantel.tipo if plantel else '',
+                'fase': get_fase_reprodutiva(b) if plantel and plantel.tipo == 'matriz' else None,
+                'total_kg': 0,
+                'custo_total': 0,
+                'registros': 0,
+                'ultimo_registro': None,
+            }
+        por_animal[b]['total_kg'] += (a.quantidade_kg or 0)
+        por_animal[b]['custo_total'] += ((a.quantidade_kg or 0) * (a.custo_unitario or 0))
+        por_animal[b]['registros'] += 1
+        data_str = a.data.isoformat() if a.data else None
+        if data_str and (por_animal[b]['ultimo_registro'] is None or data_str > por_animal[b]['ultimo_registro']):
+            por_animal[b]['ultimo_registro'] = data_str
+
+    resultado = sorted(por_animal.values(), key=lambda x: x['brinco'])
+    for r in resultado:
+        r['total_kg'] = round(r['total_kg'], 2)
+        r['custo_total'] = round(r['custo_total'], 2)
+    return jsonify(resultado)
 
 
 # ============== FINANCEIRO ROUTES ==============
@@ -2112,6 +2171,7 @@ def init_db():
         # Migrations: adiciona colunas novas em tabelas existentes (idempotente)
         migrations = [
             "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_grupo VARCHAR(20)",
+            "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_brinco VARCHAR(50)",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS plantel_brinco VARCHAR(50)",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS custo FLOAT DEFAULT 0",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS marca_fabricante VARCHAR(100)",
