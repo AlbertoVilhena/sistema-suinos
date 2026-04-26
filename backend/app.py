@@ -2171,6 +2171,7 @@ def init_db():
         # Migrations: cada ALTER TABLE é executado em conexão independente
         # para evitar que uma falha aborte as subsequentes (comportamento PostgreSQL)
         migrations = [
+            "ALTER TABLE alimentacoes ALTER COLUMN lote_id DROP NOT NULL",
             "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_grupo VARCHAR(20)",
             "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_brinco VARCHAR(50)",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS plantel_brinco VARCHAR(50)",
