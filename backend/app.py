@@ -2168,7 +2168,8 @@ def delete_pesagem(pid):
 def init_db():
     with app.app_context():
         db.create_all()
-        # Migrations: adiciona colunas novas em tabelas existentes (idempotente)
+        # Migrations: cada ALTER TABLE é executado em conexão independente
+        # para evitar que uma falha aborte as subsequentes (comportamento PostgreSQL)
         migrations = [
             "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_grupo VARCHAR(20)",
             "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_brinco VARCHAR(50)",
@@ -2177,12 +2178,15 @@ def init_db():
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS marca_fabricante VARCHAR(100)",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS lote_vacina VARCHAR(50)",
         ]
-        for sql in migrations:
-            try:
-                db.session.execute(db.text(sql))
-            except Exception as e:
-                print(f'Migration skip: {e}')
-        db.session.commit()
+        with db.engine.connect() as conn:
+            for sql in migrations:
+                try:
+                    conn.execute(db.text(sql))
+                    conn.commit()
+                    print(f'Migration OK: {sql[:60]}')
+                except Exception as e:
+                    conn.rollback()
+                    print(f'Migration skip: {e}')
 
         if Usuario.query.count() == 0:
             admin = Usuario(
