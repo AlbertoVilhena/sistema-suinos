@@ -1801,7 +1801,10 @@ def get_dashboard():
             custo_racao_30d += qty * (cost or 0)
 
     custo_sanidade = db.session.query(func.sum(func.coalesce(Vacinacao.custo, 0))).scalar() or 0
-    custo_aquisicao = db.session.query(func.sum(func.coalesce(Animal.custo_aquisicao, 0))).scalar() or 0
+    # Aquisição: animais de lote + matrizes/barrão do plantel
+    custo_aquisicao_lote = db.session.query(func.sum(func.coalesce(Animal.custo_aquisicao, 0))).scalar() or 0
+    custo_aquisicao_plantel = db.session.query(func.sum(func.coalesce(Plantel.custo_aquisicao, 0))).scalar() or 0
+    custo_aquisicao = custo_aquisicao_lote + custo_aquisicao_plantel
     total_operacional = custo_racao_total + custo_sanidade + custo_aquisicao
 
     total_despesas = despesas_fin + total_operacional
@@ -1910,7 +1913,10 @@ def relatorio_financeiro():
         custo_racao += qty * (cost or 0)
 
     custo_sanidade = db.session.query(func.sum(func.coalesce(Vacinacao.custo, 0))).scalar() or 0
-    custo_aquisicao = db.session.query(func.sum(func.coalesce(Animal.custo_aquisicao, 0))).scalar() or 0
+    # Aquisição: animais de lote + matrizes/barrão do plantel
+    custo_aquisicao_lote = db.session.query(func.sum(func.coalesce(Animal.custo_aquisicao, 0))).scalar() or 0
+    custo_aquisicao_plantel = db.session.query(func.sum(func.coalesce(Plantel.custo_aquisicao, 0))).scalar() or 0
+    custo_aquisicao = custo_aquisicao_lote + custo_aquisicao_plantel
     total_operacional = custo_racao + custo_sanidade + custo_aquisicao
 
     rec_cat = db.session.query(
@@ -1967,7 +1973,9 @@ def relatorio_financeiro():
         'custos_operacionais': {
             'custo_racao': round(custo_racao, 2),
             'custo_sanidade': round(custo_sanidade, 2),
-            'custo_aquisicao_animais': round(custo_aquisicao, 2),
+            'custo_aquisicao_animais': round(custo_aquisicao_lote, 2),
+            'custo_aquisicao_plantel': round(custo_aquisicao_plantel, 2),
+            'custo_aquisicao_total': round(custo_aquisicao, 2),
             'total_operacional': round(total_operacional, 2),
         },
         'custo_racao': round(custo_racao, 2),
