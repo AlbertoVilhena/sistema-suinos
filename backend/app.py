@@ -818,11 +818,24 @@ def update_animal(aid):
     animal = Animal.query.get_or_404(aid)
     data = request.get_json()
 
+    status_anterior = animal.status
     for f in ['brinco', 'sexo', 'raca', 'peso_entrada', 'peso_atual', 'status', 'origem', 'custo_aquisicao', 'observacoes', 'lote_id']:
         if f in data:
             setattr(animal, f, data[f])
     if data.get('data_nascimento'):
         animal.data_nascimento = datetime.strptime(data['data_nascimento'], '%Y-%m-%d').date()
+
+    # Ao marcar animal como morto/vendido/transferido, decrementa quantidade_atual do lote
+    novo_status = data.get('status')
+    if novo_status and novo_status != status_anterior and novo_status in ('morto', 'vendido', 'transferido') and status_anterior == 'ativo':
+        lote = Lote.query.get(animal.lote_id) if animal.lote_id else None
+        if lote and lote.quantidade_atual > 0:
+            lote.quantidade_atual -= 1
+    # Ao reativar animal que estava morto/vendido, incrementa quantidade_atual
+    elif novo_status and novo_status == 'ativo' and status_anterior in ('morto', 'vendido', 'transferido'):
+        lote = Lote.query.get(animal.lote_id) if animal.lote_id else None
+        if lote:
+            lote.quantidade_atual += 1
 
     db.session.commit()
     return jsonify(animal.to_dict())
@@ -1861,7 +1874,10 @@ def relatorio_lotes():
 
     result = []
     for lote in lotes:
-        mortalidade = lote.quantidade_inicial - lote.quantidade_atual
+        # Mortalidade: usa contagem real de animais com status='morto' OU diferença inicial-atual
+        mortos_registrados = sum(1 for a in lote.animais if a.status == 'morto')
+        mortalidade_batch = max(0, lote.quantidade_inicial - lote.quantidade_atual)
+        mortalidade = max(mortos_registrados, mortalidade_batch)
         taxa_mort = (mortalidade / lote.quantidade_inicial * 100) if lote.quantidade_inicial else 0
         custo_alim = sum(
             (a.quantidade_kg or 0) * (a.custo_unitario if a.custo_unitario is not None else (a.formulacao_ref.calcular_custo_por_kg() if a.formulacao_ref else 0))
@@ -2370,10 +2386,11 @@ def analise_venda():
 
     for lote in lotes:
         animais = Animal.query.filter_by(lote_id=lote.id, status='ativo').all()
-        alimentacoes = Alimentacao.query.filter_by(lote_id=lote.id).all()
+        alimentacoes = Alimentacao.query.options(joinedload(Alimentacao.formulacao_ref)).filter_by(lote_id=lote.id).all()
         vacinacoes = Vacinacao.query.filter_by(lote_id=lote.id).all()
 
-        qtd = len(animais)
+        # Usa animais individuais se registrados, senão usa quantidade_atual do lote
+        qtd = len(animais) if animais else (lote.quantidade_atual or 0)
         if qtd == 0:
             continue
 
@@ -2398,14 +2415,21 @@ def analise_venda():
                 ganho_total = peso_medio - peso_medio_entrada
                 ganho_diario = round(ganho_total / max(dias_producao, 1), 3)
         else:
-            # Sem pesagens: usar peso_atual dos animais individuais
+            # Sem pesagens: usar peso_atual dos animais individuais (se existirem) ou peso_medio_entrada do lote
             pesos = [a.peso_atual for a in animais if a.peso_atual]
-            peso_medio = sum(pesos) / len(pesos) if pesos else 0
+            if pesos:
+                peso_medio = sum(pesos) / len(pesos)
+            else:
+                # Sem animais individuais: usar peso_medio_entrada como estimativa
+                peso_medio = lote.peso_medio_entrada or 0
             ganho_total = peso_medio - peso_medio_entrada
             ganho_diario = round(ganho_total / max(dias_producao, 1), 3)
 
-        # Custos
-        custo_racao = sum((a.quantidade_kg or 0) * (a.custo_unitario or 0) for a in alimentacoes)
+        # Custos (com fallback na formulação para custo_unitario NULL)
+        custo_racao = sum(
+            (a.quantidade_kg or 0) * (a.custo_unitario if a.custo_unitario is not None else (a.formulacao_ref.calcular_custo_por_kg() if a.formulacao_ref else 0))
+            for a in alimentacoes
+        )
         custo_sanidade = sum(v.custo or 0 for v in vacinacoes)
         custo_aquisicao = sum(a.custo_aquisicao or 0 for a in animais)
         custo_total = custo_racao + custo_sanidade + custo_aquisicao
