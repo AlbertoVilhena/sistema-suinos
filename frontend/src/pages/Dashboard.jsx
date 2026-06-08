@@ -44,7 +44,7 @@ export default function Dashboard() {
     { icon: '📉', label: 'Despesas', value: fmtMoeda(data?.despesas), cls: 'red' },
   ]
 
-  const saldo = (data?.receitas || 0) - (data?.despesas || 0)
+  const saldo = data?.saldo ?? ((data?.receitas || 0) - (data?.despesas || 0))
 
   return (
     <Layout title="Dashboard">
@@ -112,8 +112,9 @@ export default function Dashboard() {
           <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
               { label: '📈 Receitas', value: fmtMoeda(data?.receitas), color: '#198754' },
-              { label: '📉 Despesas', value: fmtMoeda(data?.despesas), color: '#dc3545' },
-              { label: '💼 Saldo', value: fmtMoeda(saldo), color: saldo >= 0 ? '#198754' : '#dc3545', bold: true, border: true },
+              { label: '📉 Despesas Financeiro', value: fmtMoeda(data?.despesas_financeiro ?? data?.despesas), color: '#dc3545' },
+              { label: '⚙️ Custos Operacionais', value: fmtMoeda(data?.total_operacional), color: '#fd7e14', sub: 'ração + sanidade + aquisição' },
+              { label: '💼 Saldo da Operação', value: fmtMoeda(saldo), color: saldo >= 0 ? '#198754' : '#dc3545', bold: true, border: true },
               { label: '🌽 Ração (30 dias)', value: fmtMoeda(data?.custo_racao_30dias) },
             ].map((row, i) => (
               <div key={i} style={{
@@ -121,7 +122,10 @@ export default function Dashboard() {
                 flexWrap: 'wrap', gap: 4,
                 ...(row.border ? { borderTop: '1px solid #dee2e6', paddingTop: 12 } : {})
               }}>
-                <span style={{ color: '#6c757d', fontSize: 13 }}>{row.label}</span>
+                <div>
+                  <span style={{ color: '#6c757d', fontSize: 13 }}>{row.label}</span>
+                  {row.sub && <div style={{ fontSize: 11, color: '#adb5bd' }}>{row.sub}</div>}
+                </div>
                 <strong style={{ color: row.color, fontSize: row.bold ? 16 : 14 }}>{row.value}</strong>
               </div>
             ))}
