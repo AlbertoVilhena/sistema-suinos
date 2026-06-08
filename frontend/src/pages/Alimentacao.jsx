@@ -4,6 +4,7 @@ import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
@@ -34,6 +35,7 @@ const emptyForm = {
 export default function Alimentacao() {
   const { canEdit, canWrite } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [alims, setAlims] = useState([])
   const [lotes, setLotes] = useState([])
   const [formulacoes, setFormulacoes] = useState([])
@@ -115,7 +117,7 @@ export default function Alimentacao() {
   }
 
   const handleDelete = async (a) => {
-    if (!window.confirm('Excluir este registro de alimentação?')) return
+    if (!await confirm('Excluir este registro de alimentação?')) return
     try { await api.delete(`/api/alimentacoes/${a.id}`); load(); if (showConsumo) loadConsumo() }
     catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir registro') }
   }

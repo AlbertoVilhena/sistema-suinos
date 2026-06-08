@@ -4,6 +4,7 @@ import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 const statusBadge = { ativo: 'badge-green', morto: 'badge-red', vendido: 'badge-blue', transferido: 'badge-purple' }
@@ -23,6 +24,7 @@ const emptyBatch = {
 export default function Animais() {
   const { canEdit, canWrite } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [animais, setAnimais] = useState([])
   const [lotes, setLotes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -62,7 +64,7 @@ export default function Animais() {
   }
 
   const handleDelete = async (a) => {
-    if (!window.confirm(`Excluir animal ${a.brinco || '#' + a.id}?`)) return
+    if (!await confirm(`Excluir animal ${a.brinco || '#' + a.id}? Esta ação não pode ser desfeita.`)) return
     try { await api.delete(`/api/animais/${a.id}`); load() }
     catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir animal') }
   }

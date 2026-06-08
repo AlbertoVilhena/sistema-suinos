@@ -4,6 +4,7 @@ import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
@@ -23,6 +24,7 @@ const emptyPlanoForm = { nome: '', descricao: '', tipo_destino: 'lote', fase_lot
 export default function Sanidade() {
   const { canEdit, canWrite } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [tab, setTab] = useState('agenda')
 
   // Vacinações
@@ -282,7 +284,7 @@ export default function Sanidade() {
     } finally { setSavingVac(false) }
   }
   const handleDeleteVac = async (v) => {
-    if (!window.confirm('Excluir registro de vacinação?')) return
+    if (!await confirm('Excluir registro de vacinação?')) return
     try { await api.delete(`/api/vacinacoes/${v.id}`); load() }
     catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
@@ -313,7 +315,7 @@ export default function Sanidade() {
     } finally { setSavingPlano(false) }
   }
   const handleDeletePlano = async (p) => {
-    if (!window.confirm(`Excluir plano "${p.nome}"?`)) return
+    if (!await confirm(`Excluir plano "${p.nome}"?`)) return
     try { await api.delete(`/api/planos-vacinacao/${p.id}`); load() }
     catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
@@ -486,7 +488,7 @@ export default function Sanidade() {
                         <td data-label="">
                           {canEdit() && (
                             <button className="btn btn-danger btn-sm" onClick={async () => {
-                              if (!window.confirm('Remover este plano?')) return
+                              if (!await confirm('Remover este plano do lote?')) return
                               await api.delete(`/api/aplicacoes-plano/${ap.id}`)
                               load()
                             }}>🗑️</button>

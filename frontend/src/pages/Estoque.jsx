@@ -4,6 +4,7 @@ import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const categoriaBadge = { racao: 'badge-green', medicamento: 'badge-blue', vacina: 'badge-purple', outro: 'badge-gray' }
 const categoriaLabel = { racao: 'Ração', medicamento: 'Medicamento', vacina: 'Vacina', outro: 'Outro' }
@@ -14,6 +15,7 @@ const emptyForm = { nome: '', categoria: 'racao', unidade: 'kg', quantidade: '',
 export default function Estoque() {
   const { canEdit, canWrite } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterCat, setFilterCat] = useState('')
@@ -56,7 +58,7 @@ export default function Estoque() {
   }
 
   const handleDelete = async (i) => {
-    if (!window.confirm(`Excluir "${i.nome}" do estoque?`)) return
+    if (!await confirm(`Excluir "${i.nome}" do estoque?`)) return
     try { await api.delete(`/api/estoque/${i.id}`); load(); toast.success('Item excluído') }
     catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }

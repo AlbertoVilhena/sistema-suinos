@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ToastProvider } from './context/ToastContext'
 import ErrorBoundary from './components/ErrorBoundary'
+import { ConfirmProvider } from './components/ConfirmDialog'
 
 // Lazy loading: cada página só é carregada quando o usuário navega até ela
 // Reduz o bundle inicial de ~400KB para ~80KB
@@ -86,9 +87,11 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <ToastProvider>
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
+          <ConfirmProvider>
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </ConfirmProvider>
         </ToastProvider>
       </AuthProvider>
     </ErrorBoundary>

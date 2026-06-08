@@ -4,6 +4,7 @@ import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`
 const fmtMoeda2 = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
@@ -18,6 +19,7 @@ const emptyIng = { nome: '', unidade: 'kg', estoque_kg: '', custo_por_kg: '' }
 export default function Formulacao() {
   const { canEdit } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [tab, setTab] = useState('formulacoes')
 
   const [formulacoes, setFormulacoes] = useState([])
@@ -93,7 +95,7 @@ export default function Formulacao() {
   }
 
   const handleDeleteForm = async (f) => {
-    if (!window.confirm(`Excluir formulacao "${f.nome}"?`)) return
+    if (!await confirm(`Excluir formulação "${f.nome}"?`)) return
     try { await api.delete(`/api/formulacoes/${f.id}`); load(); toast.success('Formulação excluída') }
     catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
@@ -119,7 +121,7 @@ export default function Formulacao() {
   }
 
   const handleDeleteIng = async (i) => {
-    if (!window.confirm(`Excluir ingrediente "${i.nome}"?`)) return
+    if (!await confirm(`Excluir ingrediente "${i.nome}"?`)) return
     try { await api.delete(`/api/ingredientes/${i.id}`); load(); toast.success('Ingrediente excluído') }
     catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }

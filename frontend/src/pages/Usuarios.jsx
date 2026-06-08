@@ -4,6 +4,7 @@ import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const fmtData = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-'
 
@@ -26,6 +27,7 @@ const emptyForm = { nome: '', email: '', senha: '', confirmarSenha: '', role: 'o
 export default function Usuarios() {
   const { usuario: currentUser } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [usuarios, setUsuarios] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -75,7 +77,7 @@ export default function Usuarios() {
 
   const handleDelete = async (u) => {
     if (u.id === currentUser.id) { toast.warning('Você não pode desativar sua própria conta'); return }
-    if (!window.confirm(`Desativar usuário ${u.nome}?`)) return
+    if (!await confirm(`Desativar usuário ${u.nome}? Ele não poderá mais fazer login.`, { confirmLabel: 'Desativar' })) return
     try { await api.delete(`/api/usuarios/${u.id}`); load(); toast.success(`Usuário ${u.nome} desativado`) }
     catch (e) { toast.error(e.response?.data?.error || 'Erro ao desativar') }
   }

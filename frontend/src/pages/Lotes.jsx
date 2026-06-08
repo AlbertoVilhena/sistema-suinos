@@ -4,6 +4,7 @@ import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 const fmtNum = (v, d = 1) => Number(v || 0).toFixed(d)
@@ -23,6 +24,7 @@ const emptyPesagem = { data: today, peso_medio: '', total_animais: '', observaco
 export default function Lotes() {
   const { canEdit, canWrite, isAdmin } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [lotes, setLotes] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -83,7 +85,7 @@ export default function Lotes() {
   }
 
   const handleDeletePesagem = async (pid) => {
-    if (!window.confirm('Excluir esta pesagem?')) return
+    if (!await confirm('Excluir esta pesagem?')) return
     try {
       await api.delete(`/api/pesagens/${pid}`)
       const r = await api.get(`/api/pesagens?lote_id=${pesagemLote.id}`)
@@ -114,7 +116,7 @@ export default function Lotes() {
   }
 
   const handleDelete = async (l) => {
-    if (!window.confirm(`Excluir lote ${l.numero}? Esta ação não pode ser desfeita.`)) return
+    if (!await confirm(`Excluir lote ${l.numero}? Esta ação não pode ser desfeita.`)) return
     try {
       await api.delete(`/api/lotes/${l.id}`)
       load()

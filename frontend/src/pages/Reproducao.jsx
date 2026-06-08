@@ -4,6 +4,7 @@ import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 
@@ -26,6 +27,7 @@ const emptyForm = {
 export default function Reproducao() {
   const { canEdit, canWrite } = useAuth()
   const toast = useToast()
+  const confirm = useConfirm()
   const [reproducoes, setReproducoes] = useState([])
   const [lotes, setLotes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -111,7 +113,7 @@ export default function Reproducao() {
   }
 
   const handleDelete = async (r) => {
-    if (!window.confirm('Excluir este registro de reprodução?')) return
+    if (!await confirm('Excluir este registro de reprodução?')) return
     try { await api.delete(`/api/reproducoes/${r.id}`); load() }
     catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
