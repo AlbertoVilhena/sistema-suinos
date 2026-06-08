@@ -1909,11 +1909,15 @@ def relatorio_financeiro():
             'resultado': round(rec_l - custo_total_l, 2),
         })
 
+    total_custos = total_desp + total_operacional
+    saldo_real = total_rec - total_custos
+
     return jsonify({
         'total_receitas': round(total_rec, 2),
         'total_despesas': round(total_desp, 2),
-        'saldo': round(total_rec - total_desp, 2),
-        'lucro': round(total_rec - total_desp, 2),
+        'total_custos': round(total_custos, 2),
+        'saldo': round(saldo_real, 2),
+        'lucro': round(saldo_real, 2),
         'custos_operacionais': {
             'custo_racao': round(custo_racao, 2),
             'custo_sanidade': round(custo_sanidade, 2),
