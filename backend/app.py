@@ -1783,7 +1783,18 @@ def get_dashboard():
     total_vacinacoes = Vacinacao.query.count()
 
     receitas = db.session.query(func.sum(Financeiro.valor)).filter_by(tipo='receita').scalar() or 0
-    despesas = db.session.query(func.sum(Financeiro.valor)).filter_by(tipo='despesa').scalar() or 0
+    despesas_fin = db.session.query(func.sum(Financeiro.valor)).filter_by(tipo='despesa').scalar() or 0
+
+    # Custos operacionais dos outros módulos
+    custo_racao_total = db.session.query(
+        func.sum(Alimentacao.quantidade_kg * Alimentacao.custo_unitario)
+    ).scalar() or 0
+    custo_sanidade = db.session.query(func.sum(Vacinacao.custo)).scalar() or 0
+    custo_aquisicao = db.session.query(func.sum(Animal.custo_aquisicao)).scalar() or 0
+    total_operacional = custo_racao_total + custo_sanidade + custo_aquisicao
+
+    total_despesas = despesas_fin + total_operacional
+    saldo = receitas - total_despesas
 
     partos_previstos = Reproducao.query.filter(
         Reproducao.data_parto_previsto >= hoje,
@@ -1791,7 +1802,7 @@ def get_dashboard():
         Reproducao.status == 'gestacao'
     ).count()
 
-    custo_racao = db.session.query(
+    custo_racao_30d = db.session.query(
         func.sum(Alimentacao.quantidade_kg * Alimentacao.custo_unitario)
     ).filter(Alimentacao.data >= ultimo_mes).scalar() or 0
 
@@ -1801,11 +1812,13 @@ def get_dashboard():
         'total_lotes_ativos': total_lotes_ativos,
         'total_animais': total_animais,
         'total_vacinacoes': total_vacinacoes,
-        'receitas': receitas,
-        'despesas': despesas,
-        'saldo': receitas - despesas,
+        'receitas': round(receitas, 2),
+        'despesas': round(total_despesas, 2),
+        'despesas_financeiro': round(despesas_fin, 2),
+        'total_operacional': round(total_operacional, 2),
+        'saldo': round(saldo, 2),
         'partos_previstos_30dias': partos_previstos,
-        'custo_racao_30dias': custo_racao,
+        'custo_racao_30dias': round(custo_racao_30d, 2),
         'lotes_recentes': [l.to_dict() for l in lotes_recentes]
     })
 
