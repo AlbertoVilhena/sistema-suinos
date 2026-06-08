@@ -213,9 +213,13 @@ export default function Relatorios() {
         <div>
           {/* Saldo em destaque */}
           <div className="rel-fin-saldo" style={{ borderColor: relFin.saldo >= 0 ? '#198754' : '#dc3545' }}>
-            <div className="rel-fin-saldo-label">Saldo</div>
+            <div className="rel-fin-saldo-label">Saldo da Operação</div>
             <div className="rel-fin-saldo-value" style={{ color: relFin.saldo >= 0 ? '#198754' : '#dc3545' }}>
               {relFin.saldo >= 0 ? '✅' : '⚠️'} {fmtMoeda(relFin.saldo)}
+            </div>
+            <div style={{ fontSize: 12, color: '#6c757d', marginTop: 8, display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <span>📈 Receitas: <strong style={{ color: '#198754' }}>{fmtMoeda(relFin.total_receitas)}</strong></span>
+              <span>📉 Despesas: <strong style={{ color: '#dc3545' }}>{fmtMoeda(relFin.total_custos ?? (relFin.total_despesas + relFin.total_operacional))}</strong></span>
             </div>
           </div>
 
@@ -227,7 +231,13 @@ export default function Relatorios() {
             </div>
             <div className="stat-card">
               <div className="stat-icon red">📉</div>
-              <div><div className="stat-value" style={{ fontSize: 17 }}>{fmtMoeda(relFin.total_despesas)}</div><div className="stat-label">Total Despesas</div></div>
+              <div>
+                <div className="stat-value" style={{ fontSize: 17 }}>{fmtMoeda(relFin.total_custos ?? (relFin.total_despesas + relFin.total_operacional))}</div>
+                <div className="stat-label">Total Despesas</div>
+                <div style={{ fontSize: 11, color: '#6c757d', marginTop: 2 }}>
+                  Financeiro + Operacional
+                </div>
+              </div>
             </div>
           </div>
 
