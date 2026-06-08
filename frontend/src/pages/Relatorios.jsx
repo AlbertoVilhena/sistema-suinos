@@ -116,7 +116,14 @@ export default function Relatorios() {
 
   if (loading) return <Layout title="Relatórios"><div className="loading"><div className="spinner" />Carregando...</div></Layout>
 
-  const desp = relFin?.despesas_por_categoria || []
+  const despFin = relFin?.despesas_por_categoria || []
+  // Adiciona custos operacionais como categorias extras para o gráfico ficar completo
+  const despOp = relFin?.custos_operacionais ? [
+    ...(relFin.custos_operacionais.custo_racao > 0 ? [{ categoria: '🌽 Ração', total: relFin.custos_operacionais.custo_racao }] : []),
+    ...(relFin.custos_operacionais.custo_sanidade > 0 ? [{ categoria: '💉 Sanidade', total: relFin.custos_operacionais.custo_sanidade }] : []),
+    ...((relFin.custos_operacionais.custo_aquisicao_total ?? relFin.custos_operacionais.custo_aquisicao_animais ?? 0) > 0 ? [{ categoria: '🐖 Aquisição', total: relFin.custos_operacionais.custo_aquisicao_total ?? relFin.custos_operacionais.custo_aquisicao_animais }] : []),
+  ] : []
+  const desp = [...despFin, ...despOp]
   const rec = relFin?.receitas_por_categoria || []
   const maxDesp = Math.max(...desp.map(d => d.total), 1)
   const maxRec = Math.max(...rec.map(r => r.total), 1)
@@ -283,10 +290,11 @@ export default function Relatorios() {
               <div className="card-title">⚙️ Custos Operacionais</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 12 }}>
                 {[
-                  { label: 'Ração', value: relFin.custos_operacionais.custo_racao },
-                  { label: 'Sanidade', value: relFin.custos_operacionais.custo_sanidade },
-                  { label: 'Aquisição', value: relFin.custos_operacionais.custo_aquisicao_animais },
-                  { label: 'Total', value: relFin.custos_operacionais.total_operacional, bold: true },
+                  { label: '🌽 Ração', value: relFin.custos_operacionais.custo_racao },
+                  { label: '💉 Sanidade', value: relFin.custos_operacionais.custo_sanidade },
+                  { label: '🐷 Aquisição Lotes', value: relFin.custos_operacionais.custo_aquisicao_animais },
+                  { label: '🐖 Aquisição Plantel', value: relFin.custos_operacionais.custo_aquisicao_plantel ?? 0 },
+                  { label: '⚙️ Total Operacional', value: relFin.custos_operacionais.total_operacional, bold: true },
                 ].map((item, i) => (
                   <div key={i} style={{ padding: '10px 12px', background: '#f8f9fa', borderRadius: 8 }}>
                     <div style={{ fontSize: 11, color: '#6c757d', textTransform: 'uppercase', fontWeight: 600 }}>{item.label}</div>
