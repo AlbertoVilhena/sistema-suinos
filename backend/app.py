@@ -1290,13 +1290,26 @@ def delete_reproducao(rid):
 @jwt_required()
 def get_alimentacoes():
     lote_id = request.args.get('lote_id')
+    limit  = min(int(request.args.get('limit', 300)), 2000)
+    offset = int(request.args.get('offset', 0))
+
     q = Alimentacao.query.options(
         joinedload(Alimentacao.lote),
         joinedload(Alimentacao.formulacao_ref)
     )
     if lote_id:
         q = q.filter_by(lote_id=lote_id)
-    return jsonify([a.to_dict() for a in q.order_by(Alimentacao.data.desc()).all()])
+
+    q = q.order_by(Alimentacao.data.desc())
+    total = q.count()
+    items = q.limit(limit).offset(offset).all()
+
+    response = jsonify([a.to_dict() for a in items])
+    response.headers['X-Total-Count'] = str(total)
+    response.headers['X-Limit'] = str(limit)
+    response.headers['X-Offset'] = str(offset)
+    response.headers['Access-Control-Expose-Headers'] = 'X-Total-Count, X-Limit, X-Offset'
+    return response
 
 
 @app.route('/api/alimentacoes', methods=['POST'])
