@@ -113,7 +113,7 @@ export default function Dashboard() {
             {[
               { label: '📈 Receitas', value: fmtMoeda(data?.receitas), color: '#198754' },
               { label: '📉 Despesas Financeiro', value: fmtMoeda(data?.despesas_financeiro ?? data?.despesas), color: '#dc3545' },
-              { label: '⚙️ Custos Operacionais', value: fmtMoeda(data?.total_operacional), color: '#fd7e14', sub: 'ração + sanidade + aquisição' },
+              { label: '⚙️ Custos Operacionais', value: fmtMoeda(data?.total_operacional), color: '#fd7e14', sub: 'ração + sanidade + aquisição (lotes e plantel)' },
               { label: '💼 Saldo da Operação', value: fmtMoeda(saldo), color: saldo >= 0 ? '#198754' : '#dc3545', bold: true, border: true },
               { label: '🌽 Ração (30 dias)', value: fmtMoeda(data?.custo_racao_30dias) },
             ].map((row, i) => (
