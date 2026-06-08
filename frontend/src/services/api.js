@@ -7,8 +7,22 @@ const API_URL = (envUrl && !envUrl.includes('railway')) ? envUrl : RENDER_URL
 const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 15000  // 15s — aguarda Render acordar do cold start
+  timeout: 30000  // 30s — aguarda Render acordar do cold start (free tier dorme após 15min)
 })
+
+// Emite evento global quando o servidor está acordando (para mostrar aviso ao usuário)
+let coldStartWarningShown = false
+function notifyColdStart() {
+  if (!coldStartWarningShown) {
+    coldStartWarningShown = true
+    window.dispatchEvent(new CustomEvent('render-cold-start'))
+    // Limpa o aviso depois de 20s
+    setTimeout(() => {
+      coldStartWarningShown = false
+      window.dispatchEvent(new CustomEvent('render-ready'))
+    }, 20000)
+  }
+}
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
@@ -28,15 +42,15 @@ api.interceptors.response.use(
     const isLoginEndpoint = config?.url?.includes('/auth/login')
 
     // Auto-retry para GET em erros de rede ou 5xx (Render cold start / Neon SSL drop)
-    // Evita dados zerados na primeira carga sem precisar atualizar a página
     const isGet = config?.method?.toLowerCase() === 'get'
     const isServerError = !error.response || status >= 500
     config._retries = config._retries || 0
 
-    if (isGet && isServerError && config._retries < 2) {
+    if (isGet && isServerError && config._retries < 3) {
       config._retries++
-      // Espera crescente: 1s na 1ª tentativa, 2s na 2ª
-      await new Promise(r => setTimeout(r, 1000 * config._retries))
+      if (config._retries === 1) notifyColdStart()
+      // Espera crescente: 2s, 4s, 6s
+      await new Promise(r => setTimeout(r, 2000 * config._retries))
       return api(config)
     }
 

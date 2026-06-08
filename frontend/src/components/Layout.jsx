@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -21,6 +21,18 @@ export default function Layout({ children, title }) {
   const { usuario, logout, isAdmin, canGestao } = useAuth()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [coldStart, setColdStart] = useState(false)
+
+  useEffect(() => {
+    const onStart = () => setColdStart(true)
+    const onReady = () => setColdStart(false)
+    window.addEventListener('render-cold-start', onStart)
+    window.addEventListener('render-ready', onReady)
+    return () => {
+      window.removeEventListener('render-cold-start', onStart)
+      window.removeEventListener('render-ready', onReady)
+    }
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -82,7 +94,7 @@ export default function Layout({ children, title }) {
         </nav>
 
         <div className="sidebar-footer">
-          v2.0.0 &copy; {new Date().getFullYear()} GranjaApp
+          v2.2.0 &copy; {new Date().getFullYear()} GranjaApp
         </div>
       </aside>
 
@@ -109,6 +121,15 @@ export default function Layout({ children, title }) {
           </div>
         </header>
 
+        {coldStart && (
+          <div style={{
+            background: '#fff3cd', borderBottom: '1px solid #ffc107',
+            padding: '8px 20px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8
+          }}>
+            <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+            Servidor acordando... aguarde alguns segundos na primeira requisição.
+          </div>
+        )}
         <main className="page-content">
           {children}
         </main>
