@@ -1786,11 +1786,22 @@ def get_dashboard():
     despesas_fin = db.session.query(func.sum(Financeiro.valor)).filter_by(tipo='despesa').scalar() or 0
 
     # Custos operacionais dos outros módulos
-    custo_racao_total = db.session.query(
-        func.sum(Alimentacao.quantidade_kg * Alimentacao.custo_unitario)
-    ).scalar() or 0
-    custo_sanidade = db.session.query(func.sum(Vacinacao.custo)).scalar() or 0
-    custo_aquisicao = db.session.query(func.sum(Animal.custo_aquisicao)).scalar() or 0
+    # Usa Python para calcular custo de ração com fallback na formulação
+    # (custo_unitario pode ser NULL se o usuário não informou preço ao registrar)
+    alims_all = Alimentacao.query.options(joinedload(Alimentacao.formulacao)).all()
+    custo_racao_total = 0
+    custo_racao_30d = 0
+    for a in alims_all:
+        qty = a.quantidade_kg or 0
+        cost = a.custo_unitario
+        if cost is None and a.formulacao:
+            cost = a.formulacao.calcular_custo_por_kg()
+        custo_racao_total += qty * (cost or 0)
+        if a.data and a.data >= ultimo_mes:
+            custo_racao_30d += qty * (cost or 0)
+
+    custo_sanidade = db.session.query(func.sum(func.coalesce(Vacinacao.custo, 0))).scalar() or 0
+    custo_aquisicao = db.session.query(func.sum(func.coalesce(Animal.custo_aquisicao, 0))).scalar() or 0
     total_operacional = custo_racao_total + custo_sanidade + custo_aquisicao
 
     total_despesas = despesas_fin + total_operacional
@@ -1801,10 +1812,6 @@ def get_dashboard():
         Reproducao.data_parto_previsto <= em_30_dias,
         Reproducao.status == 'gestacao'
     ).count()
-
-    custo_racao_30d = db.session.query(
-        func.sum(Alimentacao.quantidade_kg * Alimentacao.custo_unitario)
-    ).filter(Alimentacao.data >= ultimo_mes).scalar() or 0
 
     lotes_recentes = Lote.query.order_by(Lote.criado_em.desc()).limit(5).all()
 
@@ -1833,7 +1840,7 @@ def relatorio_lotes():
         return jsonify({'error': 'Permissão negada'}), 403
     # Carrega tudo com eager loading — evita N+1 queries por lote
     lotes = Lote.query.options(
-        subqueryload(Lote.alimentacoes),
+        subqueryload(Lote.alimentacoes).joinedload(Alimentacao.formulacao),
         subqueryload(Lote.vacinacoes),
         subqueryload(Lote.animais),
     ).all()
@@ -1853,7 +1860,10 @@ def relatorio_lotes():
     for lote in lotes:
         mortalidade = lote.quantidade_inicial - lote.quantidade_atual
         taxa_mort = (mortalidade / lote.quantidade_inicial * 100) if lote.quantidade_inicial else 0
-        custo_alim = sum((a.quantidade_kg * (a.custo_unitario or 0)) for a in lote.alimentacoes)
+        custo_alim = sum(
+            (a.quantidade_kg or 0) * (a.custo_unitario if a.custo_unitario is not None else (a.formulacao.calcular_custo_por_kg() if a.formulacao else 0))
+            for a in lote.alimentacoes
+        )
         custo_sanidade = sum((v.custo or 0) for v in lote.vacinacoes)
         custo_aquisicao = sum((a.custo_aquisicao or 0) for a in lote.animais)
         custo_total = custo_alim + custo_sanidade + custo_aquisicao
@@ -1889,11 +1899,18 @@ def relatorio_financeiro():
     total_desp = db.session.query(func.sum(Financeiro.valor)).filter_by(tipo='despesa').scalar() or 0
 
     # Custos operacionais (fora do módulo financeiro)
-    custo_racao = db.session.query(
-        func.sum(Alimentacao.quantidade_kg * Alimentacao.custo_unitario)
-    ).scalar() or 0
-    custo_sanidade = db.session.query(func.sum(Vacinacao.custo)).scalar() or 0
-    custo_aquisicao = db.session.query(func.sum(Animal.custo_aquisicao)).scalar() or 0
+    # Usa Python para custo de ração com fallback na formulação quando custo_unitario é NULL
+    alims_rel = Alimentacao.query.options(joinedload(Alimentacao.formulacao)).all()
+    custo_racao = 0
+    for a in alims_rel:
+        qty = a.quantidade_kg or 0
+        cost = a.custo_unitario
+        if cost is None and a.formulacao:
+            cost = a.formulacao.calcular_custo_por_kg()
+        custo_racao += qty * (cost or 0)
+
+    custo_sanidade = db.session.query(func.sum(func.coalesce(Vacinacao.custo, 0))).scalar() or 0
+    custo_aquisicao = db.session.query(func.sum(func.coalesce(Animal.custo_aquisicao, 0))).scalar() or 0
     total_operacional = custo_racao + custo_sanidade + custo_aquisicao
 
     rec_cat = db.session.query(
@@ -1906,7 +1923,7 @@ def relatorio_financeiro():
 
     # Resultado por lote — tudo agregado em 3 queries, sem loop com queries
     lotes = Lote.query.options(
-        subqueryload(Lote.alimentacoes),
+        subqueryload(Lote.alimentacoes).joinedload(Alimentacao.formulacao),
         subqueryload(Lote.vacinacoes),
         subqueryload(Lote.animais),
     ).all()
@@ -1922,7 +1939,10 @@ def relatorio_financeiro():
     for lote in lotes:
         rec_l = rec_por_lote.get(lote.id, 0)
         desp_l = desp_por_lote.get(lote.id, 0)
-        custo_alim_l = sum((a.quantidade_kg * (a.custo_unitario or 0)) for a in lote.alimentacoes)
+        custo_alim_l = sum(
+            (a.quantidade_kg or 0) * (a.custo_unitario if a.custo_unitario is not None else (a.formulacao.calcular_custo_por_kg() if a.formulacao else 0))
+            for a in lote.alimentacoes
+        )
         custo_san_l = sum((v.custo or 0) for v in lote.vacinacoes)
         custo_aq_l = sum((a.custo_aquisicao or 0) for a in lote.animais)
         custo_total_l = desp_l + custo_alim_l + custo_san_l + custo_aq_l
