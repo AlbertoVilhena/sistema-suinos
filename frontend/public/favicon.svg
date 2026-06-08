@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#2d6a4f"/>
+  <!-- Pig face -->
+  <circle cx="32" cy="34" r="18" fill="#f9c6c6"/>
+  <!-- Ears -->
+  <ellipse cx="18" cy="22" rx="7" ry="9" fill="#f9c6c6" transform="rotate(-20 18 22)"/>
+  <ellipse cx="46" cy="22" rx="7" ry="9" fill="#f9c6c6" transform="rotate(20 46 22)"/>
+  <ellipse cx="18" cy="22" rx="4" ry="6" fill="#f4a0a0" transform="rotate(-20 18 22)"/>
+  <ellipse cx="46" cy="22" rx="4" ry="6" fill="#f4a0a0" transform="rotate(20 46 22)"/>
+  <!-- Eyes -->
+  <circle cx="26" cy="30" r="3" fill="#5a3825"/>
+  <circle cx="38" cy="30" r="3" fill="#5a3825"/>
+  <circle cx="27" cy="29" r="1" fill="white"/>
+  <circle cx="39" cy="29" r="1" fill="white"/>
+  <!-- Snout -->
+  <ellipse cx="32" cy="40" rx="8" ry="5" fill="#f4a0a0"/>
+  <!-- Nostrils -->
+  <ellipse cx="29" cy="40" rx="2" ry="1.5" fill="#d97a7a"/>
+  <ellipse cx="35" cy="40" rx="2" ry="1.5" fill="#d97a7a"/>
+</svg>

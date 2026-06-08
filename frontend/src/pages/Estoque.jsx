@@ -3,6 +3,7 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 
 const categoriaBadge = { racao: 'badge-green', medicamento: 'badge-blue', vacina: 'badge-purple', outro: 'badge-gray' }
 const categoriaLabel = { racao: 'Ração', medicamento: 'Medicamento', vacina: 'Vacina', outro: 'Outro' }
@@ -12,6 +13,7 @@ const emptyForm = { nome: '', categoria: 'racao', unidade: 'kg', quantidade: '',
 
 export default function Estoque() {
   const { canEdit, canWrite } = useAuth()
+  const toast = useToast()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterCat, setFilterCat] = useState('')
@@ -46,17 +48,17 @@ export default function Estoque() {
   const openEntrada = (item) => { setSelectedItem(item); setEntradaForm({ quantidade: '', custo_unitario: item.custo_unitario || '' }); setShowEntradaModal(true) }
 
   const handleEntrada = async () => {
-    if (!entradaForm.quantidade) { alert('Informe a quantidade'); return }
+    if (!entradaForm.quantidade) { toast.warning('Informe a quantidade'); return }
     setSaving(true)
-    try { await api.post(`/api/estoque/${selectedItem.id}/entrada`, entradaForm); setShowEntradaModal(false); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro ao registrar entrada') }
+    try { await api.post(`/api/estoque/${selectedItem.id}/entrada`, entradaForm); setShowEntradaModal(false); load(); toast.success('Entrada registrada com sucesso!') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao registrar entrada') }
     finally { setSaving(false) }
   }
 
   const handleDelete = async (i) => {
     if (!window.confirm(`Excluir "${i.nome}" do estoque?`)) return
-    try { await api.delete(`/api/estoque/${i.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro') }
+    try { await api.delete(`/api/estoque/${i.id}`); load(); toast.success('Item excluído') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))

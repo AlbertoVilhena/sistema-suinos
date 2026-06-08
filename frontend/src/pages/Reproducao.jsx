@@ -3,6 +3,7 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 
@@ -24,6 +25,7 @@ const emptyForm = {
 
 export default function Reproducao() {
   const { canEdit, canWrite } = useAuth()
+  const toast = useToast()
   const [reproducoes, setReproducoes] = useState([])
   const [lotes, setLotes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -100,9 +102,9 @@ export default function Reproducao() {
       await api.post('/api/lotes', loteForm)
       setShowCriarLoteModal(false)
       load()
-      alert(`Lote "${loteForm.numero}" criado com sucesso!`)
+      toast.success(`Lote "${loteForm.numero}" criado com sucesso!`)
     } catch (e) {
-      alert(e.response?.data?.error || 'Erro ao criar lote')
+      toast.error(e.response?.data?.error || 'Erro ao criar lote')
     } finally {
       setSavingLote(false)
     }
@@ -111,7 +113,7 @@ export default function Reproducao() {
   const handleDelete = async (r) => {
     if (!window.confirm('Excluir este registro de reprodução?')) return
     try { await api.delete(`/api/reproducoes/${r.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro ao excluir') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
 
   const set = (k, v) => {

@@ -1,0 +1,20 @@
+{
+  "name": "GranjaApp — Gestão de Suinocultura",
+  "short_name": "GranjaApp",
+  "description": "Sistema completo de gestão para granjas suínas",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0f4f2",
+  "theme_color": "#2d6a4f",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "lang": "pt-BR"
+}

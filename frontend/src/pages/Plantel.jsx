@@ -3,6 +3,7 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
@@ -18,6 +19,7 @@ const emptyForm = {
 
 export default function Plantel() {
   const { canEdit, canWrite, isAdmin } = useAuth()
+  const toast = useToast()
   const [tab, setTab] = useState('matrizes')
   const [plantel, setPlantel] = useState([])
   const [loading, setLoading] = useState(true)
@@ -59,6 +61,7 @@ export default function Plantel() {
       else { await api.post('/api/plantel', form) }
       setShowModal(false)
       load()
+      toast.success(editing ? 'Animal atualizado!' : `${form.tipo === 'matriz' ? 'Matriz' : 'Reprodutor'} cadastrado!`)
     } catch (e) {
       setError(e.response?.data?.error || `Erro ${e.response?.status}`)
     } finally { setSaving(false) }
@@ -67,7 +70,7 @@ export default function Plantel() {
   const handleDelete = async (p) => {
     if (!window.confirm(`Excluir ${p.tipo} ${p.brinco}?`)) return
     try { await api.delete(`/api/plantel/${p.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro ao excluir') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))

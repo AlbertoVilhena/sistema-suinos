@@ -3,6 +3,7 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
@@ -32,6 +33,7 @@ const emptyForm = {
 
 export default function Alimentacao() {
   const { canEdit, canWrite } = useAuth()
+  const toast = useToast()
   const [alims, setAlims] = useState([])
   const [lotes, setLotes] = useState([])
   const [formulacoes, setFormulacoes] = useState([])
@@ -105,6 +107,7 @@ export default function Alimentacao() {
       setShowModal(false)
       load()
       if (showConsumo) loadConsumo()
+      toast.success(editing ? 'Registro atualizado!' : 'Alimentação registrada!')
     } catch (e) {
       const msg = e.response?.data?.error || e.response?.data?.msg || (e.response ? `Erro ${e.response.status}: ${JSON.stringify(e.response.data)}` : 'Sem resposta do servidor')
       setError(msg)
@@ -114,7 +117,7 @@ export default function Alimentacao() {
   const handleDelete = async (a) => {
     if (!window.confirm('Excluir este registro de alimentação?')) return
     try { await api.delete(`/api/alimentacoes/${a.id}`); load(); if (showConsumo) loadConsumo() }
-    catch (e) { alert(e.response?.data?.error || 'Erro') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir registro') }
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))

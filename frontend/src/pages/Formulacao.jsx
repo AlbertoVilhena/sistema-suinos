@@ -3,6 +3,7 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 
 const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`
 const fmtMoeda2 = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
@@ -16,6 +17,7 @@ const emptyIng = { nome: '', unidade: 'kg', estoque_kg: '', custo_por_kg: '' }
 
 export default function Formulacao() {
   const { canEdit } = useAuth()
+  const toast = useToast()
   const [tab, setTab] = useState('formulacoes')
 
   const [formulacoes, setFormulacoes] = useState([])
@@ -92,8 +94,8 @@ export default function Formulacao() {
 
   const handleDeleteForm = async (f) => {
     if (!window.confirm(`Excluir formulacao "${f.nome}"?`)) return
-    try { await api.delete(`/api/formulacoes/${f.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro ao excluir') }
+    try { await api.delete(`/api/formulacoes/${f.id}`); load(); toast.success('Formulação excluída') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
 
   const openCreateIng = () => { setEditingIng(null); setIngForm(emptyIng); setIngError(''); setShowIngModal(true) }
@@ -118,8 +120,8 @@ export default function Formulacao() {
 
   const handleDeleteIng = async (i) => {
     if (!window.confirm(`Excluir ingrediente "${i.nome}"?`)) return
-    try { await api.delete(`/api/ingredientes/${i.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro ao excluir') }
+    try { await api.delete(`/api/ingredientes/${i.id}`); load(); toast.success('Ingrediente excluído') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
 
   const openImportEstoque = async () => {
@@ -132,13 +134,13 @@ export default function Formulacao() {
       setSelectedImport(sel)
       setShowImportModal(true)
     } catch (e) {
-      alert('Erro ao carregar estoque')
+      toast.error('Erro ao carregar estoque')
     }
   }
 
   const handleImportConfirm = async () => {
     const toImport = estoqueRacao.filter(i => selectedImport[i.id])
-    if (toImport.length === 0) { alert('Selecione pelo menos um item'); return }
+    if (toImport.length === 0) { toast.warning('Selecione pelo menos um item'); return }
     setImportando(true)
     try {
       for (const item of toImport) {
@@ -160,9 +162,9 @@ export default function Formulacao() {
       }
       setShowImportModal(false)
       load()
-      alert(`${toImport.length} ingrediente(s) importado(s) do estoque!`)
+      toast.success(`${toImport.length} ingrediente(s) importado(s) do estoque!`)
     } catch (e) {
-      alert(e.response?.data?.error || 'Erro ao importar')
+      toast.error(e.response?.data?.error || 'Erro ao importar')
     } finally { setImportando(false) }
   }
 
@@ -183,7 +185,7 @@ export default function Formulacao() {
       await api.post(`/api/formulacoes/${producaoTarget.id}/produzir`, payload)
       setShowProducaoModal(false)
       load()
-      alert(`✅ Produção registrada em Alimentação!\n${producaoForm.quantidade_kg} kg de "${producaoTarget.nome}"`)
+      toast.success(`Produção registrada! ${producaoForm.quantidade_kg} kg de "${producaoTarget.nome}" lançado em Alimentação`)
     } catch (e) {
       setProducaoError(e.response?.data?.error || 'Erro ao registrar produção')
     } finally { setSavingProducao(false) }

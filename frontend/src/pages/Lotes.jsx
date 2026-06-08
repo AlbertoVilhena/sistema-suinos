@@ -3,6 +3,7 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 const fmtNum = (v, d = 1) => Number(v || 0).toFixed(d)
@@ -21,6 +22,7 @@ const emptyPesagem = { data: today, peso_medio: '', total_animais: '', observaco
 
 export default function Lotes() {
   const { canEdit, canWrite, isAdmin } = useAuth()
+  const toast = useToast()
   const [lotes, setLotes] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -86,7 +88,7 @@ export default function Lotes() {
       await api.delete(`/api/pesagens/${pid}`)
       const r = await api.get(`/api/pesagens?lote_id=${pesagemLote.id}`)
       setPesagens(r.data)
-    } catch (e) { alert(e.response?.data?.error || 'Erro') }
+    } catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir pesagem') }
   }
 
   const setP = (k, v) => setPesagemForm(f => ({ ...f, [k]: v }))
@@ -102,6 +104,7 @@ export default function Lotes() {
       }
       setShowModal(false)
       load()
+      toast.success(editing ? 'Lote atualizado com sucesso!' : 'Lote criado com sucesso!')
     } catch (e) {
       const msg = e.response?.data?.error || e.response?.data?.msg || (e.response ? `Erro ${e.response.status}: ${JSON.stringify(e.response.data)}` : 'Sem resposta do servidor')
       setError(msg)
@@ -116,7 +119,7 @@ export default function Lotes() {
       await api.delete(`/api/lotes/${l.id}`)
       load()
     } catch (e) {
-      alert(e.response?.data?.error || 'Erro ao excluir')
+      toast.error(e.response?.data?.error || 'Erro ao excluir lote')
     }
   }
 

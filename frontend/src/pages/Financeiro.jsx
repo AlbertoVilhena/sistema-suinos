@@ -3,6 +3,7 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
@@ -19,6 +20,7 @@ const emptyForm = {
 
 export default function Financeiro() {
   const { canEdit, canWrite } = useAuth()
+  const toast = useToast()
   const [registros, setRegistros] = useState([])
   const [lotes, setLotes] = useState([])
   const [estoqueItems, setEstoqueItems] = useState([])
@@ -56,6 +58,7 @@ export default function Financeiro() {
       if (editing) { await api.put(`/api/financeiro/${editing.id}`, form) }
       else { await api.post('/api/financeiro', form) }
       setShowModal(false); load()
+      toast.success(editing ? 'Registro atualizado!' : `${form.tipo === 'receita' ? 'Receita' : 'Despesa'} registrada!`)
     } catch (e) {
       const msg = e.response?.data?.error || e.response?.data?.msg || `Erro ${e.response?.status}`
       setError(msg)
@@ -65,7 +68,7 @@ export default function Financeiro() {
   const handleDelete = async (r) => {
     if (!window.confirm('Excluir este registro financeiro?')) return
     try { await api.delete(`/api/financeiro/${r.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))

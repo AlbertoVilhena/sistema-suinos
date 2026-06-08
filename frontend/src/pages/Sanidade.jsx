@@ -3,6 +3,7 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
 const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
@@ -21,6 +22,7 @@ const emptyPlanoForm = { nome: '', descricao: '', tipo_destino: 'lote', fase_lot
 
 export default function Sanidade() {
   const { canEdit, canWrite } = useAuth()
+  const toast = useToast()
   const [tab, setTab] = useState('agenda')
 
   // Vacinações
@@ -93,7 +95,7 @@ export default function Sanidade() {
     // Abre a janela ANTES do await — browsers bloqueiam window.open() após chamadas assíncronas
     const win = window.open('', '_blank')
     if (!win) {
-      alert('Pop-up bloqueado pelo navegador.\nPermita pop-ups para este site e tente novamente.')
+      toast.warning('Pop-up bloqueado pelo navegador. Permita pop-ups para este site e tente novamente.')
       return
     }
     win.document.write('<html><body style="font-family:Arial;padding:40px;text-align:center;color:#555"><p style="font-size:18px">⏳ Gerando agenda de vacinação...</p></body></html>')
@@ -246,7 +248,7 @@ export default function Sanidade() {
       setTimeout(() => win.print(), 600)
     } catch (e) {
       win.close()
-      alert('Erro ao gerar PDF da agenda: ' + (e.response?.data?.error || e.message || 'Tente novamente'))
+      toast.error('Erro ao gerar PDF da agenda: ' + (e.response?.data?.error || e.message || 'Tente novamente'))
     }
   }
 
@@ -282,7 +284,7 @@ export default function Sanidade() {
   const handleDeleteVac = async (v) => {
     if (!window.confirm('Excluir registro de vacinação?')) return
     try { await api.delete(`/api/vacinacoes/${v.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
   const setVF = (k, v) => setVacForm(f => ({ ...f, [k]: v }))
 
@@ -313,7 +315,7 @@ export default function Sanidade() {
   const handleDeletePlano = async (p) => {
     if (!window.confirm(`Excluir plano "${p.nome}"?`)) return
     try { await api.delete(`/api/planos-vacinacao/${p.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
   const setPF = (k, v) => setPlanoForm(f => ({ ...f, [k]: v }))
   const addPlanoItem = () => setPlanoItens(prev => [...prev, { vacina: '', dias_apos_entrada: '', dose: '', observacoes: '' }])

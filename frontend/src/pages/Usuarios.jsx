@@ -3,6 +3,7 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
 
 const fmtData = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '-'
 
@@ -24,6 +25,7 @@ const emptyForm = { nome: '', email: '', senha: '', confirmarSenha: '', role: 'o
 
 export default function Usuarios() {
   const { usuario: currentUser } = useAuth()
+  const toast = useToast()
   const [usuarios, setUsuarios] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -72,17 +74,18 @@ export default function Usuarios() {
   }
 
   const handleDelete = async (u) => {
-    if (u.id === currentUser.id) { alert('Você não pode desativar sua própria conta'); return }
+    if (u.id === currentUser.id) { toast.warning('Você não pode desativar sua própria conta'); return }
     if (!window.confirm(`Desativar usuário ${u.nome}?`)) return
-    try { await api.delete(`/api/usuarios/${u.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro ao desativar') }
+    try { await api.delete(`/api/usuarios/${u.id}`); load(); toast.success(`Usuário ${u.nome} desativado`) }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao desativar') }
   }
 
   const handleReativar = async (u) => {
     try {
       await api.put(`/api/usuarios/${u.id}`, { ativo: true })
       load()
-    } catch (e) { alert('Erro ao reativar') }
+      toast.success(`Usuário ${u.nome} reativado`)
+    } catch (e) { toast.error('Erro ao reativar usuário') }
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
