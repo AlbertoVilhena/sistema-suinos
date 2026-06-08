@@ -12,6 +12,7 @@ from flask_jwt_extended import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload, subqueryload
 
 app = Flask(__name__)
 
@@ -135,11 +136,10 @@ class Animal(db.Model):
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
-        lote = Lote.query.get(self.lote_id) if self.lote_id else None
         return {
             'id': self.id,
             'lote_id': self.lote_id,
-            'lote_numero': lote.numero if lote else None,
+            'lote_numero': self.lote.numero if self.lote else None,
             'brinco': self.brinco,
             'sexo': self.sexo,
             'raca': self.raca,
@@ -171,11 +171,10 @@ class Vacinacao(db.Model):
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
-        lote = Lote.query.get(self.lote_id) if self.lote_id else None
         return {
             'id': self.id,
             'lote_id': self.lote_id,
-            'lote_numero': lote.numero if lote else None,
+            'lote_numero': self.lote.numero if self.lote else None,
             'animal_id': self.animal_id,
             'plantel_brinco': self.plantel_brinco,
             'vacina': self.vacina,
@@ -206,7 +205,6 @@ class Reproducao(db.Model):
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
-        lote = Lote.query.get(self.lote_id) if self.lote_id else None
         return {
             'id': self.id,
             'femea_brinco': self.femea_brinco,
@@ -219,7 +217,7 @@ class Reproducao(db.Model):
             'status': self.status,
             'observacoes': self.observacoes,
             'lote_id': self.lote_id,
-            'lote_numero': lote.numero if lote else None,
+            'lote_numero': self.lote.numero if self.lote else None,
             'criado_em': self.criado_em.isoformat()
         }
 
@@ -237,17 +235,16 @@ class Alimentacao(db.Model):
     custo_unitario = db.Column(db.Float)
     observacoes = db.Column(db.Text)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    formulacao_ref = db.relationship('Formulacao', foreign_keys=[formulacao_id], lazy='select')
 
     def to_dict(self):
-        lote = Lote.query.get(self.lote_id) if self.lote_id else None
         custo_total = (self.quantidade_kg * self.custo_unitario) if self.custo_unitario else 0
-        formulacao = Formulacao.query.get(self.formulacao_id) if self.formulacao_id else None
         return {
             'id': self.id,
             'formulacao_id': self.formulacao_id,
-            'formulacao_nome': formulacao.nome if formulacao else None,
+            'formulacao_nome': self.formulacao_ref.nome if self.formulacao_ref else None,
             'lote_id': self.lote_id,
-            'lote_numero': lote.numero if lote else None,
+            'lote_numero': self.lote.numero if self.lote else None,
             'plantel_grupo': self.plantel_grupo,
             'plantel_brinco': self.plantel_brinco,
             'data': self.data.isoformat() if self.data else None,
@@ -273,7 +270,6 @@ class Financeiro(db.Model):
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
-        lote = Lote.query.get(self.lote_id) if self.lote_id else None
         return {
             'id': self.id,
             'tipo': self.tipo,
@@ -282,7 +278,7 @@ class Financeiro(db.Model):
             'valor': self.valor,
             'data': self.data.isoformat() if self.data else None,
             'lote_id': self.lote_id,
-            'lote_numero': lote.numero if lote else None,
+            'lote_numero': self.lote.numero if self.lote else None,
             'usuario_id': self.usuario_id,
             'criado_em': self.criado_em.isoformat()
         }
@@ -321,10 +317,10 @@ class Formulacao(db.Model):
     itens = db.relationship('FormulacaoItem', backref='formulacao', lazy=True, cascade='all, delete-orphan')
 
     def calcular_custo_por_kg(self):
-        # Sempre usa o preço atual do ingrediente para refletir cotações atualizadas
+        # Usa o relacionamento pré-carregado — sem query extra por ingrediente
         total = 0
         for i in self.itens:
-            ing = Ingrediente.query.get(i.ingrediente_id)
+            ing = i.ingrediente_ref
             preco_atual = (ing.custo_por_kg or 0) if ing else (i.custo_unitario or 0)
             total += (i.percentagem / 100) * preco_atual
         return round(total, 4)
@@ -351,9 +347,10 @@ class FormulacaoItem(db.Model):
     ingrediente_id = db.Column(db.Integer, db.ForeignKey('ingredientes.id'), nullable=False)
     percentagem = db.Column(db.Float, nullable=False)
     custo_unitario = db.Column(db.Float, default=0)  # snapshot do custo na criação
+    ingrediente_ref = db.relationship('Ingrediente', foreign_keys=[ingrediente_id], lazy='select')
 
     def to_dict(self):
-        ing = Ingrediente.query.get(self.ingrediente_id)
+        ing = self.ingrediente_ref
         # Usa preço atual do ingrediente; custo_unitario é apenas o snapshot histórico
         preco_atual = (ing.custo_por_kg or 0) if ing else (self.custo_unitario or 0)
         return {
@@ -779,7 +776,7 @@ def delete_lote(lid):
 @jwt_required()
 def get_animais():
     lote_id = request.args.get('lote_id')
-    q = Animal.query
+    q = Animal.query.options(joinedload(Animal.lote))
     if lote_id:
         q = q.filter_by(lote_id=lote_id)
     return jsonify([a.to_dict() for a in q.order_by(Animal.criado_em.desc()).all()])
@@ -850,7 +847,7 @@ def delete_animal(aid):
 @jwt_required()
 def get_vacinacoes():
     lote_id = request.args.get('lote_id')
-    q = Vacinacao.query
+    q = Vacinacao.query.options(joinedload(Vacinacao.lote))
     if lote_id:
         q = q.filter_by(lote_id=lote_id)
     return jsonify([v.to_dict() for v in q.order_by(Vacinacao.data.desc()).all()])
@@ -1207,7 +1204,7 @@ def get_agenda_vacinacao():
 @app.route('/api/reproducoes', methods=['GET'])
 @jwt_required()
 def get_reproducoes():
-    reproducoes = Reproducao.query.order_by(Reproducao.data_cobertura.desc()).all()
+    reproducoes = Reproducao.query.options(joinedload(Reproducao.lote)).order_by(Reproducao.data_cobertura.desc()).all()
     return jsonify([r.to_dict() for r in reproducoes])
 
 
@@ -1293,7 +1290,10 @@ def delete_reproducao(rid):
 @jwt_required()
 def get_alimentacoes():
     lote_id = request.args.get('lote_id')
-    q = Alimentacao.query
+    q = Alimentacao.query.options(
+        joinedload(Alimentacao.lote),
+        joinedload(Alimentacao.formulacao_ref)
+    )
     if lote_id:
         q = q.filter_by(lote_id=lote_id)
     return jsonify([a.to_dict() for a in q.order_by(Alimentacao.data.desc()).all()])
@@ -1392,22 +1392,47 @@ def get_fase_reprodutiva(brinco):
 @app.route('/api/alimentacoes/consumo-individual', methods=['GET'])
 @jwt_required()
 def consumo_individual_plantel():
-    """Retorna resumo de consumo de ração por animal individual do plantel."""
+    """Retorna resumo de consumo por animal individual — 3 queries fixas independente do volume."""
     alims = Alimentacao.query.filter(Alimentacao.plantel_brinco.isnot(None)).all()
+    if not alims:
+        return jsonify([])
+
+    unique_brincos = list({a.plantel_brinco for a in alims})
+
+    # 1 query para todos os animais necessários
+    plantel_map = {p.brinco: p for p in Plantel.query.filter(Plantel.brinco.in_(unique_brincos)).all()}
+
+    # 1 query para a última reprodução de cada brinco
+    sub = db.session.query(
+        Reproducao.femea_brinco,
+        func.max(Reproducao.id).label('max_id')
+    ).filter(Reproducao.femea_brinco.in_(unique_brincos)).group_by(Reproducao.femea_brinco).subquery()
+    repros = db.session.query(Reproducao).join(sub, Reproducao.id == sub.c.max_id).all()
+    repro_map = {r.femea_brinco: r for r in repros}
+
+    today = date.today()
+    def fase_rapida(repro):
+        if not repro: return 'vazia'
+        if repro.status == 'gestacao':
+            if repro.data_parto_previsto and (repro.data_parto_previsto - today).days <= 10:
+                return 'pre_parto'
+            return 'gestacao'
+        if repro.status in ('parto', 'desmame'):
+            if repro.data_parto_real and (today - repro.data_parto_real).days <= 35:
+                return 'lactacao'
+        return 'vazia'
+
     por_animal = {}
     for a in alims:
         b = a.plantel_brinco
         if b not in por_animal:
-            plantel = Plantel.query.filter_by(brinco=b).first()
+            p = plantel_map.get(b)
             por_animal[b] = {
                 'brinco': b,
-                'nome': plantel.nome if plantel else '',
-                'tipo': plantel.tipo if plantel else '',
-                'fase': get_fase_reprodutiva(b) if plantel and plantel.tipo == 'matriz' else None,
-                'total_kg': 0,
-                'custo_total': 0,
-                'registros': 0,
-                'ultimo_registro': None,
+                'nome': p.nome if p else '',
+                'tipo': p.tipo if p else '',
+                'fase': fase_rapida(repro_map.get(b)) if p and p.tipo == 'matriz' else None,
+                'total_kg': 0, 'custo_total': 0, 'registros': 0, 'ultimo_registro': None,
             }
         por_animal[b]['total_kg'] += (a.quantidade_kg or 0)
         por_animal[b]['custo_total'] += ((a.quantidade_kg or 0) * (a.custo_unitario or 0))
@@ -1438,7 +1463,7 @@ def get_financeiro():
         q = q.filter_by(tipo=tipo)
     if lote_id:
         q = q.filter_by(lote_id=lote_id)
-    return jsonify([f.to_dict() for f in q.order_by(Financeiro.data.desc()).all()])
+    return jsonify([f.to_dict() for f in q.options(joinedload(Financeiro.lote)).order_by(Financeiro.data.desc()).all()])
 
 
 @app.route('/api/financeiro', methods=['POST'])
@@ -1601,7 +1626,9 @@ def get_formulacoes():
     u = get_current_user()
     if not can_gestao(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
-    return jsonify([f.to_dict() for f in Formulacao.query.order_by(Formulacao.nome).all()])
+    return jsonify([f.to_dict() for f in Formulacao.query.options(
+        subqueryload(Formulacao.itens).subqueryload(FormulacaoItem.ingrediente_ref)
+    ).order_by(Formulacao.nome).all()])
 
 
 @app.route('/api/formulacoes', methods=['POST'])
@@ -1778,26 +1805,37 @@ def relatorio_lotes():
     u = get_current_user()
     if not can_gestao(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
-    lotes = Lote.query.all()
+    # Carrega tudo com eager loading — evita N+1 queries por lote
+    lotes = Lote.query.options(
+        subqueryload(Lote.alimentacoes),
+        subqueryload(Lote.vacinacoes),
+        subqueryload(Lote.animais),
+    ).all()
+
+    # Receitas e despesas por lote em 2 queries agregadas
+    lote_ids = [l.id for l in lotes]
+    rec_rows = db.session.query(
+        Financeiro.lote_id, func.sum(Financeiro.valor)
+    ).filter(Financeiro.lote_id.in_(lote_ids), Financeiro.tipo == 'receita').group_by(Financeiro.lote_id).all()
+    desp_rows = db.session.query(
+        Financeiro.lote_id, func.sum(Financeiro.valor)
+    ).filter(Financeiro.lote_id.in_(lote_ids), Financeiro.tipo == 'despesa').group_by(Financeiro.lote_id).all()
+    receita_map = {r[0]: r[1] or 0 for r in rec_rows}
+    despesa_map = {r[0]: r[1] or 0 for r in desp_rows}
+
     result = []
     for lote in lotes:
         mortalidade = lote.quantidade_inicial - lote.quantidade_atual
         taxa_mort = (mortalidade / lote.quantidade_inicial * 100) if lote.quantidade_inicial else 0
         custo_alim = sum((a.quantidade_kg * (a.custo_unitario or 0)) for a in lote.alimentacoes)
         custo_sanidade = sum((v.custo or 0) for v in lote.vacinacoes)
-        animais_lote = Animal.query.filter_by(lote_id=lote.id).all()
-        custo_aquisicao = sum((a.custo_aquisicao or 0) for a in animais_lote)
+        custo_aquisicao = sum((a.custo_aquisicao or 0) for a in lote.animais)
         custo_total = custo_alim + custo_sanidade + custo_aquisicao
         qtd_atual = lote.quantidade_atual or 1
-        # Receitas vinculadas ao lote (ex: venda de animais)
-        receita_lote = db.session.query(func.sum(Financeiro.valor)).filter_by(
-            lote_id=lote.id, tipo='receita'
-        ).scalar() or 0
-        # Despesas financeiras adicionais vinculadas ao lote
-        despesa_fin_lote = db.session.query(func.sum(Financeiro.valor)).filter_by(
-            lote_id=lote.id, tipo='despesa'
-        ).scalar() or 0
+        receita_lote = receita_map.get(lote.id, 0)
+        despesa_fin_lote = despesa_map.get(lote.id, 0)
         custo_total_com_fin = custo_total + despesa_fin_lote
+        # (receita e despesa já carregados via aggregation acima)
         resultado_lote = receita_lote - custo_total_com_fin
         result.append({
             **lote.to_dict(),
@@ -1840,16 +1878,27 @@ def relatorio_financeiro():
         Financeiro.categoria, func.sum(Financeiro.valor).label('total')
     ).filter_by(tipo='despesa').group_by(Financeiro.categoria).all()
 
-    # Resultado por lote
-    lotes = Lote.query.all()
+    # Resultado por lote — tudo agregado em 3 queries, sem loop com queries
+    lotes = Lote.query.options(
+        subqueryload(Lote.alimentacoes),
+        subqueryload(Lote.vacinacoes),
+        subqueryload(Lote.animais),
+    ).all()
+    lids = [l.id for l in lotes]
+    rec_por_lote = {r[0]: r[1] or 0 for r in db.session.query(
+        Financeiro.lote_id, func.sum(Financeiro.valor)
+    ).filter(Financeiro.lote_id.in_(lids), Financeiro.tipo == 'receita').group_by(Financeiro.lote_id).all()}
+    desp_por_lote = {r[0]: r[1] or 0 for r in db.session.query(
+        Financeiro.lote_id, func.sum(Financeiro.valor)
+    ).filter(Financeiro.lote_id.in_(lids), Financeiro.tipo == 'despesa').group_by(Financeiro.lote_id).all()}
+
     resultado_por_lote = []
     for lote in lotes:
-        rec_l = db.session.query(func.sum(Financeiro.valor)).filter_by(lote_id=lote.id, tipo='receita').scalar() or 0
-        desp_l = db.session.query(func.sum(Financeiro.valor)).filter_by(lote_id=lote.id, tipo='despesa').scalar() or 0
+        rec_l = rec_por_lote.get(lote.id, 0)
+        desp_l = desp_por_lote.get(lote.id, 0)
         custo_alim_l = sum((a.quantidade_kg * (a.custo_unitario or 0)) for a in lote.alimentacoes)
         custo_san_l = sum((v.custo or 0) for v in lote.vacinacoes)
-        animais_l = Animal.query.filter_by(lote_id=lote.id).all()
-        custo_aq_l = sum((a.custo_aquisicao or 0) for a in animais_l)
+        custo_aq_l = sum((a.custo_aquisicao or 0) for a in lote.animais)
         custo_total_l = desp_l + custo_alim_l + custo_san_l + custo_aq_l
         resultado_por_lote.append({
             'lote_id': lote.id,
@@ -1904,7 +1953,7 @@ def health():
             'ingredientes': Ingrediente.query.count(),
             'formulacoes': Formulacao.query.count(),
         }
-        return jsonify({'status': 'ok', 'version': '2.1.0', 'tables': tables})
+        return jsonify({'status': 'ok', 'version': '2.2.0', 'tables': tables})
     except Exception as e:
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
@@ -2053,7 +2102,28 @@ def get_plantel():
     q = Plantel.query
     if tipo:
         q = q.filter_by(tipo=tipo)
-    return jsonify([p.to_dict() for p in q.order_by(Plantel.brinco).all()])
+    animais = q.order_by(Plantel.brinco).all()
+
+    # Batch load partos count para todas as matrizes em 1 query
+    brincos_matrizes = [a.brinco for a in animais if a.tipo == 'matriz']
+    partos_map = {}
+    if brincos_matrizes:
+        rows = db.session.query(
+            Reproducao.femea_brinco,
+            func.count(Reproducao.id).label('total')
+        ).filter(
+            Reproducao.femea_brinco.in_(brincos_matrizes),
+            Reproducao.status == 'parto'
+        ).group_by(Reproducao.femea_brinco).all()
+        partos_map = {r.femea_brinco: r.total for r in rows}
+
+    result = []
+    for p in animais:
+        d = p.to_dict()
+        if p.tipo == 'matriz':
+            d['total_partos'] = partos_map.get(p.brinco, 0)
+        result.append(d)
+    return jsonify(result)
 
 @app.route('/api/plantel', methods=['POST'])
 @jwt_required()
@@ -2171,6 +2241,7 @@ def init_db():
         # Migrations: cada ALTER TABLE é executado em conexão independente
         # para evitar que uma falha aborte as subsequentes (comportamento PostgreSQL)
         migrations = [
+            # --- Schema fixes ---
             "ALTER TABLE alimentacoes ALTER COLUMN lote_id DROP NOT NULL",
             "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_grupo VARCHAR(20)",
             "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_brinco VARCHAR(50)",
@@ -2178,6 +2249,24 @@ def init_db():
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS custo FLOAT DEFAULT 0",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS marca_fabricante VARCHAR(100)",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS lote_vacina VARCHAR(50)",
+            # --- Performance indexes ---
+            "CREATE INDEX IF NOT EXISTS idx_animais_lote_id ON animais(lote_id)",
+            "CREATE INDEX IF NOT EXISTS idx_animais_status ON animais(status)",
+            "CREATE INDEX IF NOT EXISTS idx_vacinacoes_lote_id ON vacinacoes(lote_id)",
+            "CREATE INDEX IF NOT EXISTS idx_vacinacoes_data ON vacinacoes(data)",
+            "CREATE INDEX IF NOT EXISTS idx_vacinacoes_plantel_brinco ON vacinacoes(plantel_brinco)",
+            "CREATE INDEX IF NOT EXISTS idx_alimentacoes_lote_id ON alimentacoes(lote_id)",
+            "CREATE INDEX IF NOT EXISTS idx_alimentacoes_data ON alimentacoes(data)",
+            "CREATE INDEX IF NOT EXISTS idx_alimentacoes_plantel_grupo ON alimentacoes(plantel_grupo)",
+            "CREATE INDEX IF NOT EXISTS idx_alimentacoes_plantel_brinco ON alimentacoes(plantel_brinco)",
+            "CREATE INDEX IF NOT EXISTS idx_reproducoes_femea_brinco ON reproducoes(femea_brinco)",
+            "CREATE INDEX IF NOT EXISTS idx_reproducoes_lote_id ON reproducoes(lote_id)",
+            "CREATE INDEX IF NOT EXISTS idx_financeiros_lote_id ON financeiros(lote_id)",
+            "CREATE INDEX IF NOT EXISTS idx_financeiros_tipo ON financeiros(tipo)",
+            "CREATE INDEX IF NOT EXISTS idx_financeiros_categoria ON financeiros(categoria)",
+            "CREATE INDEX IF NOT EXISTS idx_formulacao_itens_formulacao_id ON formulacao_itens(formulacao_id)",
+            "CREATE INDEX IF NOT EXISTS idx_formulacao_itens_ingrediente_id ON formulacao_itens(ingrediente_id)",
+            "CREATE INDEX IF NOT EXISTS idx_pesagens_lote_id ON pesagens(lote_id)",
         ]
         with db.engine.connect() as conn:
             for sql in migrations:
