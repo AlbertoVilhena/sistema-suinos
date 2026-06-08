@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
@@ -37,6 +37,7 @@ export default function Alimentacao() {
   const toast = useToast()
   const confirm = useConfirm()
   const [alims, setAlims] = useState([])
+  const [totalAlims, setTotalAlims] = useState(0)
   const [lotes, setLotes] = useState([])
   const [formulacoes, setFormulacoes] = useState([])
   const [plantelAnimais, setPlantelAnimais] = useState([])
@@ -49,19 +50,44 @@ export default function Alimentacao() {
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [loadingModal, setLoadingModal] = useState(false)
+  const modalDataLoaded = useRef(false)
 
+  // Carrega apenas tabela + lotes no mount (rápido)
   const load = () => {
     Promise.all([
       api.get('/api/alimentacoes'),
       api.get('/api/lotes'),
-      api.get('/api/formulacoes'),
-      api.get('/api/plantel'),
-    ]).then(([ra, rl, rf, rp]) => {
+    ]).then(([ra, rl]) => {
       setAlims(ra.data)
+      setTotalAlims(parseInt(ra.headers?.['x-total-count'] || ra.data.length))
       setLotes(rl.data)
+    }).finally(() => setLoading(false))
+  }
+
+  // Recarrega somente os registros de alimentação (sem lotes)
+  const reloadAlims = () => {
+    api.get('/api/alimentacoes').then(ra => {
+      setAlims(ra.data)
+      setTotalAlims(parseInt(ra.headers?.['x-total-count'] || ra.data.length))
+    })
+  }
+
+  // Carrega formulações e plantel apenas quando o modal é aberto pela primeira vez
+  const loadModalData = async () => {
+    if (modalDataLoaded.current) return
+    setLoadingModal(true)
+    try {
+      const [rf, rp] = await Promise.all([
+        api.get('/api/formulacoes'),
+        api.get('/api/plantel'),
+      ])
       setFormulacoes(rf.data.filter(f => f.ativa))
       setPlantelAnimais(rp.data.filter(p => p.status === 'ativo'))
-    }).finally(() => setLoading(false))
+      modalDataLoaded.current = true
+    } finally {
+      setLoadingModal(false)
+    }
   }
 
   const loadConsumo = () => {
@@ -70,8 +96,11 @@ export default function Alimentacao() {
 
   useEffect(() => { load() }, [])
 
-  const openCreate = () => { setEditing(null); setForm(emptyForm); setError(''); setShowModal(true) }
-  const openEdit = (a) => {
+  const openCreate = async () => {
+    setEditing(null); setForm(emptyForm); setError(''); setShowModal(true)
+    await loadModalData()
+  }
+  const openEdit = async (a) => {
     setEditing(a)
     const isPlantel = !!(a.plantel_grupo || a.plantel_brinco)
     const modoIndividual = !!a.plantel_brinco
@@ -83,6 +112,7 @@ export default function Alimentacao() {
     })
     setError('')
     setShowModal(true)
+    await loadModalData()
   }
 
   const handleSave = async () => {
@@ -107,7 +137,7 @@ export default function Alimentacao() {
       if (editing) { await api.put(`/api/alimentacoes/${editing.id}`, payload) }
       else { await api.post('/api/alimentacoes', payload) }
       setShowModal(false)
-      load()
+      reloadAlims()
       if (showConsumo) loadConsumo()
       toast.success(editing ? 'Registro atualizado!' : 'Alimentação registrada!')
     } catch (e) {
@@ -118,7 +148,7 @@ export default function Alimentacao() {
 
   const handleDelete = async (a) => {
     if (!await confirm('Excluir este registro de alimentação?')) return
-    try { await api.delete(`/api/alimentacoes/${a.id}`); load(); if (showConsumo) loadConsumo() }
+    try { await api.delete(`/api/alimentacoes/${a.id}`); reloadAlims(); if (showConsumo) loadConsumo() }
     catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir registro') }
   }
 
@@ -259,7 +289,21 @@ export default function Alimentacao() {
               </optgroup>
             </select>
           </div>
-          <span style={{ fontSize: 13, color: '#6c757d' }}>{filtered.length} registro(s)</span>
+          <span style={{ fontSize: 13, color: '#6c757d' }}>
+            {filtered.length} registro(s)
+            {totalAlims > alims.length && (
+              <span style={{ color: '#fd7e14', marginLeft: 6 }}>
+                (mostrando {alims.length} de {totalAlims} —{' '}
+                <button
+                  className="btn-link"
+                  style={{ color: '#fd7e14', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'inherit', textDecoration: 'underline' }}
+                  onClick={() => api.get('/api/alimentacoes?limit=2000').then(r => { setAlims(r.data); setTotalAlims(r.data.length) })}
+                >
+                  carregar todos
+                </button>)
+              </span>
+            )}
+          </span>
         </div>
 
         {loading ? <div className="loading"><div className="spinner" />Carregando...</div> : (
@@ -426,8 +470,8 @@ export default function Alimentacao() {
 
             <div className="form-group span-2">
               <label>Formulação de Ração</label>
-              <select value={form.formulacao_id} onChange={e => handleFormulacaoChange(e.target.value)}>
-                <option value="">— Selecionar formulação cadastrada —</option>
+              <select value={form.formulacao_id} onChange={e => handleFormulacaoChange(e.target.value)} disabled={loadingModal}>
+                <option value="">{loadingModal ? '⏳ Carregando formulações...' : '— Selecionar formulação cadastrada —'}</option>
                 {formulacoes.map(f => (
                   <option key={f.id} value={f.id}>
                     {f.nome} {f.fase ? `(${f.fase})` : ''} — R$ {Number(f.custo_por_kg || 0).toFixed(4)}/kg
