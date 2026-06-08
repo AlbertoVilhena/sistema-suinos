@@ -1788,14 +1788,14 @@ def get_dashboard():
     # Custos operacionais dos outros módulos
     # Usa Python para calcular custo de ração com fallback na formulação
     # (custo_unitario pode ser NULL se o usuário não informou preço ao registrar)
-    alims_all = Alimentacao.query.options(joinedload(Alimentacao.formulacao)).all()
+    alims_all = Alimentacao.query.options(joinedload(Alimentacao.formulacao_ref)).all()
     custo_racao_total = 0
     custo_racao_30d = 0
     for a in alims_all:
         qty = a.quantidade_kg or 0
         cost = a.custo_unitario
-        if cost is None and a.formulacao:
-            cost = a.formulacao.calcular_custo_por_kg()
+        if cost is None and a.formulacao_ref:
+            cost = a.formulacao_ref.calcular_custo_por_kg()
         custo_racao_total += qty * (cost or 0)
         if a.data and a.data >= ultimo_mes:
             custo_racao_30d += qty * (cost or 0)
@@ -1840,7 +1840,7 @@ def relatorio_lotes():
         return jsonify({'error': 'Permissão negada'}), 403
     # Carrega tudo com eager loading — evita N+1 queries por lote
     lotes = Lote.query.options(
-        subqueryload(Lote.alimentacoes).joinedload(Alimentacao.formulacao),
+        subqueryload(Lote.alimentacoes).joinedload(Alimentacao.formulacao_ref),
         subqueryload(Lote.vacinacoes),
         subqueryload(Lote.animais),
     ).all()
@@ -1861,7 +1861,7 @@ def relatorio_lotes():
         mortalidade = lote.quantidade_inicial - lote.quantidade_atual
         taxa_mort = (mortalidade / lote.quantidade_inicial * 100) if lote.quantidade_inicial else 0
         custo_alim = sum(
-            (a.quantidade_kg or 0) * (a.custo_unitario if a.custo_unitario is not None else (a.formulacao.calcular_custo_por_kg() if a.formulacao else 0))
+            (a.quantidade_kg or 0) * (a.custo_unitario if a.custo_unitario is not None else (a.formulacao_ref.calcular_custo_por_kg() if a.formulacao_ref else 0))
             for a in lote.alimentacoes
         )
         custo_sanidade = sum((v.custo or 0) for v in lote.vacinacoes)
@@ -1900,13 +1900,13 @@ def relatorio_financeiro():
 
     # Custos operacionais (fora do módulo financeiro)
     # Usa Python para custo de ração com fallback na formulação quando custo_unitario é NULL
-    alims_rel = Alimentacao.query.options(joinedload(Alimentacao.formulacao)).all()
+    alims_rel = Alimentacao.query.options(joinedload(Alimentacao.formulacao_ref)).all()
     custo_racao = 0
     for a in alims_rel:
         qty = a.quantidade_kg or 0
         cost = a.custo_unitario
-        if cost is None and a.formulacao:
-            cost = a.formulacao.calcular_custo_por_kg()
+        if cost is None and a.formulacao_ref:
+            cost = a.formulacao_ref.calcular_custo_por_kg()
         custo_racao += qty * (cost or 0)
 
     custo_sanidade = db.session.query(func.sum(func.coalesce(Vacinacao.custo, 0))).scalar() or 0
@@ -1923,7 +1923,7 @@ def relatorio_financeiro():
 
     # Resultado por lote — tudo agregado em 3 queries, sem loop com queries
     lotes = Lote.query.options(
-        subqueryload(Lote.alimentacoes).joinedload(Alimentacao.formulacao),
+        subqueryload(Lote.alimentacoes).joinedload(Alimentacao.formulacao_ref),
         subqueryload(Lote.vacinacoes),
         subqueryload(Lote.animais),
     ).all()
@@ -1940,7 +1940,7 @@ def relatorio_financeiro():
         rec_l = rec_por_lote.get(lote.id, 0)
         desp_l = desp_por_lote.get(lote.id, 0)
         custo_alim_l = sum(
-            (a.quantidade_kg or 0) * (a.custo_unitario if a.custo_unitario is not None else (a.formulacao.calcular_custo_por_kg() if a.formulacao else 0))
+            (a.quantidade_kg or 0) * (a.custo_unitario if a.custo_unitario is not None else (a.formulacao_ref.calcular_custo_por_kg() if a.formulacao_ref else 0))
             for a in lote.alimentacoes
         )
         custo_san_l = sum((v.custo or 0) for v in lote.vacinacoes)
