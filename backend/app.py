@@ -1848,6 +1848,170 @@ def get_dashboard():
 
 # ============== RELATORIOS ==============
 
+# GMD esperado por fase (referência suinocultura intensiva BR)
+GMD_REFERENCIA = {
+    'maternidade': {'min': 0.18, 'ideal': 0.25, 'label': 'Maternidade'},
+    'creche':      {'min': 0.35, 'ideal': 0.50, 'label': 'Creche'},
+    'crescimento': {'min': 0.55, 'ideal': 0.70, 'label': 'Crescimento'},
+    'terminacao':  {'min': 0.75, 'ideal': 0.90, 'label': 'Terminação'},
+}
+
+def calcular_gmd_lote(lote):
+    """Calcula GMD do lote com base nas pesagens registradas."""
+    pesagens = sorted(lote.pesagens, key=lambda p: p.data)
+    hoje = date.today()
+    dias_producao = (hoje - lote.data_entrada).days if lote.data_entrada else 0
+
+    peso_entrada = lote.peso_medio_entrada or 0
+
+    if len(pesagens) >= 2:
+        dias = (pesagens[-1].data - pesagens[0].data).days
+        ganho = pesagens[-1].peso_medio - pesagens[0].peso_medio
+        gmd = round(ganho / max(dias, 1), 3)
+        peso_atual = pesagens[-1].peso_medio
+        data_ref = pesagens[-1].data
+        fonte = 'pesagens'
+        n_pesagens = len(pesagens)
+    elif len(pesagens) == 1:
+        dias = (pesagens[0].data - lote.data_entrada).days if lote.data_entrada else 0
+        ganho = pesagens[0].peso_medio - peso_entrada
+        gmd = round(ganho / max(dias, 1), 3)
+        peso_atual = pesagens[0].peso_medio
+        data_ref = pesagens[0].data
+        fonte = 'pesagem_unica'
+        n_pesagens = 1
+    else:
+        # Sem pesagens — tenta usar peso_atual dos animais individuais
+        animais = [a for a in lote.animais if a.status == 'ativo' and a.peso_atual]
+        if animais:
+            pesos = [a.peso_atual for a in animais]
+            peso_atual = sum(pesos) / len(pesos)
+            ganho = peso_atual - peso_entrada
+            gmd = round(ganho / max(dias_producao, 1), 3) if dias_producao > 0 else None
+            data_ref = None
+            fonte = 'peso_animal'
+            n_pesagens = 0
+        else:
+            return None  # Sem dados suficientes
+
+    # Comparar com referência da fase
+    fase = (lote.fase or '').lower()
+    ref = GMD_REFERENCIA.get(fase)
+
+    if gmd is None or gmd <= 0:
+        status = 'sem_dados'
+        alerta = None
+        pct_ideal = None
+    elif ref:
+        pct_ideal = round((gmd / ref['ideal']) * 100, 1)
+        if gmd >= ref['min']:
+            status = 'ok'
+            alerta = None
+        elif gmd >= ref['min'] * 0.70:
+            status = 'alerta'
+            alerta = f"GMD abaixo do mínimo para {ref['label']} (mín: {ref['min']} kg/dia)"
+        else:
+            status = 'critico'
+            alerta = f"GMD CRÍTICO para {ref['label']} — {gmd:.3f} kg/dia (mín: {ref['min']} kg/dia)"
+    else:
+        pct_ideal = None
+        status = 'ok'
+        alerta = None
+
+    # Histórico de GMD por intervalo entre pesagens
+    historico = []
+    for i in range(len(pesagens) - 1, -1, -1):  # mais recente primeiro
+        p = pesagens[i]
+        p_ant = pesagens[i - 1] if i > 0 else None
+        if p_ant:
+            d = (p.data - p_ant.data).days
+            g = round((p.peso_medio - p_ant.peso_medio) / max(d, 1), 3)
+        elif lote.data_entrada:
+            d = (p.data - lote.data_entrada).days
+            g = round((p.peso_medio - peso_entrada) / max(d, 1), 3)
+        else:
+            g = None
+        historico.append({
+            'data': p.data.isoformat(),
+            'peso_medio': p.peso_medio,
+            'total_animais': p.total_animais,
+            'gmd_intervalo': g,
+            'dias_intervalo': d if p_ant or lote.data_entrada else None,
+        })
+
+    return {
+        'lote_id': lote.id,
+        'numero': lote.numero,
+        'fase': lote.fase or '-',
+        'status': lote.status,
+        'data_entrada': lote.data_entrada.isoformat() if lote.data_entrada else None,
+        'dias_producao': dias_producao,
+        'peso_entrada': peso_entrada,
+        'peso_atual': round(peso_atual, 2),
+        'gmd': gmd,
+        'n_pesagens': n_pesagens,
+        'fonte': fonte,
+        'status_gmd': status,
+        'alerta': alerta,
+        'pct_ideal': pct_ideal,
+        'ref_min': ref['min'] if ref else None,
+        'ref_ideal': ref['ideal'] if ref else None,
+        'ref_label': ref['label'] if ref else None,
+        'historico_pesagens': historico,
+    }
+
+
+@app.route('/api/relatorios/gmd', methods=['GET'])
+@jwt_required()
+def relatorio_gmd():
+    u = get_current_user()
+    if not can_gestao(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+
+    lotes = Lote.query.options(
+        subqueryload(Lote.pesagens),
+        subqueryload(Lote.animais),
+    ).all()
+
+    resultado = []
+    sem_dados = []
+    alertas_criticos = 0
+    alertas_atencao = 0
+
+    for lote in lotes:
+        dados = calcular_gmd_lote(lote)
+        if dados:
+            resultado.append(dados)
+            if dados['status_gmd'] == 'critico':
+                alertas_criticos += 1
+            elif dados['status_gmd'] == 'alerta':
+                alertas_atencao += 1
+        else:
+            sem_dados.append({
+                'lote_id': lote.id,
+                'numero': lote.numero,
+                'fase': lote.fase or '-',
+                'status': lote.status,
+                'motivo': 'Sem pesagens e sem peso registrado nos animais',
+            })
+
+    # Ordena: crítico → alerta → ok → sem_dados
+    ordem = {'critico': 0, 'alerta': 1, 'ok': 2, 'sem_dados': 3}
+    resultado.sort(key=lambda x: (ordem.get(x['status_gmd'], 4), x['numero']))
+
+    return jsonify({
+        'lotes': resultado,
+        'sem_dados': sem_dados,
+        'resumo': {
+            'total_lotes': len(resultado) + len(sem_dados),
+            'com_dados': len(resultado),
+            'alertas_criticos': alertas_criticos,
+            'alertas_atencao': alertas_atencao,
+            'ok': len([l for l in resultado if l['status_gmd'] == 'ok']),
+        },
+        'referencias': GMD_REFERENCIA,
+    })
+
 @app.route('/api/relatorios/lotes', methods=['GET'])
 @jwt_required()
 def relatorio_lotes():
