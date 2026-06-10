@@ -7,7 +7,7 @@ const API_URL = (envUrl && !envUrl.includes('railway')) ? envUrl : RENDER_URL
 const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 30000  // 30s — aguarda Render acordar do cold start (free tier dorme após 15min)
+  timeout: 60000  // 60s — aguarda Render acordar do cold start (free tier dorme após 15min)
 })
 
 // Emite evento global quando o servidor está acordando (para mostrar aviso ao usuário)
@@ -41,15 +41,17 @@ api.interceptors.response.use(
     const isJwtError = status === 422 && (msg.includes('string') || msg.includes('token') || msg.includes('Subject'))
     const isLoginEndpoint = config?.url?.includes('/auth/login')
 
-    // Auto-retry para GET em erros de rede ou 5xx (Render cold start / Neon SSL drop)
-    const isGet = config?.method?.toLowerCase() === 'get'
+    // Auto-retry para erros de rede ou 5xx (Render cold start / Neon SSL drop)
+    // GET: 3 tentativas | POST/PUT/DELETE: 2 tentativas (cold start pode afetar qualquer método)
+    const method = config?.method?.toLowerCase()
     const isServerError = !error.response || status >= 500
+    const maxRetries = method === 'get' ? 3 : 2
     config._retries = config._retries || 0
 
-    if (isGet && isServerError && config._retries < 3) {
+    if (isServerError && config._retries < maxRetries) {
       config._retries++
       if (config._retries === 1) notifyColdStart()
-      // Espera crescente: 2s, 4s, 6s
+      // Espera crescente: 2s, 4s (GET chega a 6s)
       await new Promise(r => setTimeout(r, 2000 * config._retries))
       return api(config)
     }
