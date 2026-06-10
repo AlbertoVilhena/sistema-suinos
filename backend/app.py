@@ -1678,7 +1678,7 @@ def delete_ingrediente(iid):
 @jwt_required()
 def get_formulacoes():
     u = get_current_user()
-    if not can_gestao(u.role):
+    if not can_write(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
     return jsonify([f.to_dict() for f in Formulacao.query.options(
         subqueryload(Formulacao.itens).subqueryload(FormulacaoItem.ingrediente_ref)

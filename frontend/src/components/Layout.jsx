@@ -12,7 +12,7 @@ const navItems = [
   { to: '/sanidade', icon: '💉', label: 'Sanidade' },
   { to: '/financeiro', icon: '💰', label: 'Financeiro', section: 'GESTÃO', gestaoOnly: true },
   { to: '/estoque', icon: '📦', label: 'Estoque', gestaoOnly: true },
-  { to: '/formulacao', icon: '🌾', label: 'Formulação Ração', gestaoOnly: true },
+  { to: '/formulacao', icon: '🌾', label: 'Formulação Ração' },
   { to: '/relatorios', icon: '📈', label: 'Relatórios', gestaoOnly: true },
   { to: '/usuarios', icon: '👥', label: 'Usuários', adminOnly: true },
 ]

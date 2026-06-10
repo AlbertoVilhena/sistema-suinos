@@ -17,7 +17,7 @@ const emptyForm = { nome: '', descricao: '', fase: '', ativa: true }
 const emptyIng = { nome: '', unidade: 'kg', estoque_kg: '', custo_por_kg: '' }
 
 export default function Formulacao() {
-  const { canEdit } = useAuth()
+  const { canEdit, canWrite } = useAuth()
   const toast = useToast()
   const confirm = useConfirm()
   const [tab, setTab] = useState('formulacoes')
@@ -217,8 +217,10 @@ export default function Formulacao() {
       </div>
 
       <div className="tabs">
-        <div className={`tab ${tab === 'formulacoes' ? 'active' : ''}`} onClick={() => setTab('formulacoes')}>Formulacoes</div>
-        <div className={`tab ${tab === 'ingredientes' ? 'active' : ''}`} onClick={() => setTab('ingredientes')}>Ingredientes/Estoque</div>
+        <div className={`tab ${tab === 'formulacoes' ? 'active' : ''}`} onClick={() => setTab('formulacoes')}>Formulações</div>
+        {canEdit() && (
+          <div className={`tab ${tab === 'ingredientes' ? 'active' : ''}`} onClick={() => setTab('ingredientes')}>Ingredientes/Estoque</div>
+        )}
       </div>
 
       {tab === 'formulacoes' && (
