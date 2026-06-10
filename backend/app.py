@@ -1964,14 +1964,21 @@ def calcular_gmd_lote(lote):
         else:
             return None  # Sem dados suficientes
 
-    # GMD principal para alertas = fase atual (se disponível) ou total
-    gmd = gmd_fase if gmd_fase is not None else gmd_total
+    # GMD para alertas = SOMENTE fase atual.
+    # Não usar gmd_total como fallback: comparar ganho histórico de todas
+    # as fases com o benchmark da fase atual gera alertas falsos.
+    gmd = gmd_fase
 
     # Comparar com referência da fase ATUAL
     fase = (lote.fase or '').lower()
     ref = GMD_REFERENCIA.get(fase)
 
-    if gmd is None or gmd <= 0:
+    if gmd_fase is None:
+        # Dados insuficientes na fase atual — aguardando mais pesagens
+        status = 'aguardando'
+        alerta = None
+        pct_ideal = None
+    elif gmd is None or gmd <= 0:
         status = 'sem_dados'
         alerta = None
         pct_ideal = None
