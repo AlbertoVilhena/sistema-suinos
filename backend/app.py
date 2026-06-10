@@ -2441,22 +2441,31 @@ def create_pesagem():
     u = get_current_user()
     if not can_write(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
-    data = request.get_json()
-    if not data.get('lote_id') or not data.get('peso_medio') or not data.get('data'):
-        return jsonify({'error': 'lote_id, peso_medio e data são obrigatórios'}), 400
+    data = request.get_json(force=True, silent=True)
+    if not data:
+        return jsonify({'error': 'JSON inválido ou body vazio'}), 400
+    lote_id = data.get('lote_id')
+    peso_medio = data.get('peso_medio')
+    data_str = data.get('data')
+    if not lote_id or not peso_medio or not data_str:
+        return jsonify({'error': f'Campos obrigatórios ausentes: lote_id={lote_id}, peso_medio={peso_medio}, data={data_str}'}), 400
     try:
-        data_obj = date.fromisoformat(data['data'])
-    except Exception:
-        return jsonify({'error': 'Data inválida'}), 400
-    p = Pesagem(
-        lote_id=int(data['lote_id']),
-        data=data_obj,
-        peso_medio=float(data['peso_medio']),
-        total_animais=to_int(data.get('total_animais')),
-        observacoes=data.get('observacoes')
-    )
-    db.session.add(p)
-    db.session.commit()
+        data_obj = date.fromisoformat(str(data_str))
+    except Exception as e:
+        return jsonify({'error': f'Data inválida: {data_str} — {e}'}), 400
+    try:
+        p = Pesagem(
+            lote_id=int(lote_id),
+            data=data_obj,
+            peso_medio=float(peso_medio),
+            total_animais=to_int(data.get('total_animais')),
+            observacoes=data.get('observacoes')
+        )
+        db.session.add(p)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Erro ao salvar pesagem: {str(e)}'}), 500
     return jsonify(p.to_dict()), 201
 
 @app.route('/api/pesagens/<int:pid>', methods=['DELETE'])
