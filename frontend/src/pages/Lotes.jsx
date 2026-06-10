@@ -178,6 +178,7 @@ export default function Lotes() {
                 <th>Data Entrada</th>
                 <th>Qtd Inicial</th>
                 <th>Qtd Atual</th>
+                <th>Mortes</th>
                 <th>Peso Médio (kg)</th>
                 <th>Fase</th>
                 <th>Status</th>
@@ -186,16 +187,24 @@ export default function Lotes() {
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={8} className="table-empty">
+                <tr><td colSpan={9} className="table-empty">
                   <span className="empty-icon">🐖</span>
                   Nenhum lote encontrado
                 </td></tr>
-              ) : filtered.map(l => (
+              ) : filtered.map(l => {
+                const mortes = Math.max(0, (l.quantidade_inicial || 0) - (l.quantidade_atual || 0))
+                const taxaMort = l.quantidade_inicial > 0 ? ((mortes / l.quantidade_inicial) * 100).toFixed(1) : 0
+                return (
                 <tr key={l.id}>
                   <td data-label="Número"><strong>{l.numero}</strong></td>
                   <td data-label="Data Entrada">{fmtData(l.data_entrada)}</td>
                   <td data-label="Qtd Inicial">{l.quantidade_inicial}</td>
                   <td data-label="Qtd Atual">{l.quantidade_atual}</td>
+                  <td data-label="Mortes">
+                    {mortes > 0
+                      ? <span style={{ color: '#dc3545', fontWeight: 600 }}>{mortes} <span style={{ fontSize: 11, fontWeight: 400 }}>({taxaMort}%)</span></span>
+                      : <span style={{ color: '#198754' }}>0</span>}
+                  </td>
                   <td data-label="Peso Médio">
                     {l.ultimo_peso != null
                       ? <span title={l.ultima_pesagem_data ? `Pesagem: ${fmtData(l.ultima_pesagem_data)}` : ''}>{fmtNum(l.ultimo_peso, 1)} kg</span>
@@ -222,7 +231,7 @@ export default function Lotes() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         )}

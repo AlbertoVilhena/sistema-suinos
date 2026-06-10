@@ -771,6 +771,10 @@ def update_lote(lid):
     for f in ['numero', 'quantidade_atual', 'peso_medio_entrada', 'fase', 'status', 'observacoes']:
         if f in data:
             setattr(lote, f, data[f])
+    if 'quantidade_inicial' in data:
+        qi = to_int(data.get('quantidade_inicial'))
+        if qi and qi > 0:
+            lote.quantidade_inicial = qi
     if 'data_entrada' in data:
         lote.data_entrada = datetime.strptime(data['data_entrada'], '%Y-%m-%d').date()
 
