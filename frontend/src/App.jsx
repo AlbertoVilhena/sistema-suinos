@@ -71,7 +71,7 @@ function AppRoutes() {
         <Route path="/plantel" element={<ProtectedRoute><Plantel /></ProtectedRoute>} />
         <Route path="/financeiro" element={<ProtectedRoute gestaoOnly><Financeiro /></ProtectedRoute>} />
         <Route path="/relatorios" element={<ProtectedRoute gestaoOnly><Relatorios /></ProtectedRoute>} />
-        <Route path="/formulacao" element={<ProtectedRoute gestaoOnly><Formulacao /></ProtectedRoute>} />
+        <Route path="/formulacao" element={<ProtectedRoute><Formulacao /></ProtectedRoute>} />
         <Route path="/estoque" element={<ProtectedRoute gestaoOnly><Estoque /></ProtectedRoute>} />
         <Route path="/usuarios" element={<ProtectedRoute adminOnly><Usuarios /></ProtectedRoute>} />
         <Route path="*" element={
