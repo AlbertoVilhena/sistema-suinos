@@ -90,10 +90,11 @@ function LoteCard({ l }) {
 }
 
 const GMD_STATUS = {
-  ok:        { label: 'Normal',    cls: 'badge-green',  icon: '✅' },
-  alerta:    { label: 'Abaixo',    cls: 'badge-yellow', icon: '⚠️' },
-  critico:   { label: 'Crítico',   cls: 'badge-red',    icon: '🔴' },
-  sem_dados: { label: 'Sem dados', cls: 'badge-gray',   icon: '⚫' },
+  ok:         { label: 'Normal',      cls: 'badge-green',  icon: '✅' },
+  alerta:     { label: 'Abaixo',      cls: 'badge-yellow', icon: '⚠️' },
+  critico:    { label: 'Crítico',     cls: 'badge-red',    icon: '🔴' },
+  sem_dados:  { label: 'Sem dados',   cls: 'badge-gray',   icon: '⚫' },
+  aguardando: { label: 'Aguardando',  cls: 'badge-blue',   icon: '⏳' },
 }
 
 const FASE_COR = {
@@ -164,8 +165,8 @@ export default function Relatorios() {
     const fmtD = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
     const fmtG = (v) => v != null ? `${Number(v).toFixed(3)} kg/d` : '—'
 
-    const statusCor = { ok: '#198754', alerta: '#856404', critico: '#dc3545', sem_dados: '#6c757d' }
-    const statusLabel = { ok: '✅ Normal', alerta: '⚠️ Abaixo', critico: '🔴 Crítico', sem_dados: '— Sem dados' }
+    const statusCor = { ok: '#198754', alerta: '#856404', critico: '#dc3545', sem_dados: '#6c757d', aguardando: '#0d6efd' }
+    const statusLabel = { ok: '✅ Normal', alerta: '⚠️ Abaixo', critico: '🔴 Crítico', sem_dados: '— Sem dados', aguardando: '⏳ Aguardando' }
     const faseCor = { maternidade: '#9c27b0', creche: '#1976d2', crescimento: '#009688', terminacao: '#f57c00' }
 
     const linhasLotes = relGmd.lotes.map((l, i) => {
@@ -174,14 +175,14 @@ export default function Relatorios() {
       const rowBg = l.status_gmd === 'critico' ? '#fff5f5' : l.status_gmd === 'alerta' ? '#fffbf0' : (i % 2 === 0 ? '#fff' : '#fafafa')
       const pct = l.pct_ideal != null ? `${l.pct_ideal}%` : '—'
       const diasStr = l.dias_na_fase !== l.dias_producao
-        ? `${l.dias_na_fase}d <span style="color:#999;font-size:10px">(${l.dias_producao}d total)</span>`
+        ? `${l.dias_na_fase}d <span style="color:#6c757d;font-size:10px">(${l.dias_producao}d total)</span>`
         : `${l.dias_na_fase}d`
       const faseStr = l.fase_desde_entrada === false && l.data_inicio_fase
-        ? `<span style="color:${fc};font-weight:600">${l.fase}</span><br><span style="font-size:10px;color:#999">desde ${fmtD(l.data_inicio_fase)}</span>`
+        ? `<span style="color:${fc};font-weight:600">${l.fase}</span><br><span style="font-size:10px;color:#6c757d">desde ${fmtD(l.data_inicio_fase)}</span>`
         : `<span style="color:${fc};font-weight:600">${l.fase}</span>`
       const gmdFaseStr = l.gmd_fase != null
-        ? `<strong style="color:${cor};font-size:13px">${Number(l.gmd_fase).toFixed(3)}</strong><br><span style="font-size:10px;color:#999">kg/dia</span>`
-        : `<span style="color:#999;font-size:12px">Aguard. 2ª pesagem</span>`
+        ? `<strong style="color:${cor};font-size:13px">${Number(l.gmd_fase).toFixed(3)}</strong><br><span style="font-size:10px;color:#495057">kg/dia</span>`
+        : `<span style="color:#0d6efd;font-size:11px;font-weight:600">⏳ Aguard. 2ª pesagem</span>`
       const histRows = (l.historico_pesagens || []).map(p => {
         const ref = relGmd.referencias[l.fase?.toLowerCase()]
         const ok = p.gmd_intervalo != null && ref ? p.gmd_intervalo >= ref.min : null
@@ -198,7 +199,7 @@ export default function Relatorios() {
           <td style="padding:9px 10px;border-bottom:1px solid #eee"><strong>${l.numero}</strong><br><span style="font-size:10px;color:#999">${fmtD(l.data_entrada)}</span></td>
           <td style="padding:9px 10px;border-bottom:1px solid #eee">${faseStr}</td>
           <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center">${diasStr}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:right">${l.peso_ref_fase > 0 ? l.peso_ref_fase + ' kg' : '—'}<br><span style="font-size:10px;color:#999">→ ${l.peso_atual} kg</span></td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:right"><span style="color:#888;font-size:10px">Ref: </span>${l.peso_ref_fase > 0 ? l.peso_ref_fase + ' kg' : '—'}<br><span style="font-size:10px;color:#888">Atual: </span><strong style="font-size:12px;color:#212529">${l.peso_atual != null ? l.peso_atual + ' kg' : '—'}</strong></td>
           <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center">${gmdFaseStr}</td>
           <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#666;font-size:11px">${fmtG(l.gmd_total)}</td>
           <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#666;font-size:11px">${l.ref_min != null ? l.ref_min : '—'}</td>
