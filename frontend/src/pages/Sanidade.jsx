@@ -254,6 +254,191 @@ export default function Sanidade() {
     }
   }
 
+  // ---- PDF Relatório ----
+  const gerarPDFRelatorio = () => {
+    if (!relatorio) { toast.error('Carregue o relatório antes de gerar o PDF'); return }
+    const win = window.open('', '_blank')
+    if (!win) { toast.warning('Pop-up bloqueado pelo navegador. Permita pop-ups para este site e tente novamente.'); return }
+
+    const hoje = new Date().toLocaleDateString('pt-BR')
+    const fmtDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
+    const fmtR = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+
+    const secaoAtrasadas = relatorio.pendentes_atrasadas.length === 0 ? '' : `
+      <h3 style="font-size:13px;font-weight:700;color:#c0392b;margin:24px 0 8px">🔴 Vacinações Atrasadas (${relatorio.pendentes_atrasadas.length})</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+        <thead><tr style="background:#c0392b;color:#fff">
+          <th style="padding:8px 10px;text-align:left;font-size:11px">Vacina</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px">Destino</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px">Plano</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px">Data Prevista</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px">Atraso</th>
+        </tr></thead>
+        <tbody>
+          ${relatorio.pendentes_atrasadas.map((p, i) => `
+            <tr style="background:${i % 2 === 0 ? '#fff' : '#fafafa'}">
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:600">${p.vacina}${p.dose ? ` <span style="color:#666;font-weight:400">· ${p.dose}</span>` : ''}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee">${p.plantel_grupo ? p.plantel_grupo : (p.lote_numero || '-')}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee">${p.plano_nome}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee">${fmtDate(p.data_prevista)}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;color:#c0392b;font-weight:700">${p.dias_atraso} dia(s)</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`
+
+    const secaoVacinas = `
+      <h3 style="font-size:13px;font-weight:700;margin:24px 0 8px">💉 Resumo por Vacina</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+        <thead><tr style="background:#1b5e20;color:#fff">
+          <th style="padding:8px 10px;text-align:left;font-size:11px">Vacina / Medicamento</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px">Doses Aplicadas</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px">Custo Total</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px">Custo Médio / Dose</th>
+        </tr></thead>
+        <tbody>
+          ${relatorio.por_vacina.map((v, i) => `
+            <tr style="background:${i % 2 === 0 ? '#fff' : '#fafafa'}">
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:600">${v.vacina}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center">${v.total_doses}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;color:#1b5e20;font-weight:600">${fmtR(v.custo_total)}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right">${fmtR(v.total_doses ? v.custo_total / v.total_doses : 0)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`
+
+    const secaoLotes = relatorio.por_lote.length === 0 ? '' : `
+      <h3 style="font-size:13px;font-weight:700;margin:24px 0 8px">🐖 Vacinações por Lote</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+        <thead><tr style="background:#0d3b66;color:#fff">
+          <th style="padding:8px 10px;text-align:left;font-size:11px">Lote</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px">Doses</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px">Vacinas</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px">Custo Total</th>
+        </tr></thead>
+        <tbody>
+          ${relatorio.por_lote.map((l, i) => `
+            <tr style="background:${i % 2 === 0 ? '#fff' : '#fafafa'}">
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:600">${l.lote_numero}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center">${l.total_doses}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:11px;color:#555">${l.vacinas.join(', ')}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmtR(l.custo_total)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`
+
+    const secaoPlantel = relatorio.por_plantel.length === 0 ? '' : `
+      <h3 style="font-size:13px;font-weight:700;margin:24px 0 8px">🐷 Vacinações do Plantel</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+        <thead><tr style="background:#4a0e8f;color:#fff">
+          <th style="padding:8px 10px;text-align:left;font-size:11px">Animal (Brinco)</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px">Doses</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px">Custo Total</th>
+        </tr></thead>
+        <tbody>
+          ${relatorio.por_plantel.map((p, i) => `
+            <tr style="background:${i % 2 === 0 ? '#fff' : '#fafafa'}">
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:600">🐷 ${p.brinco}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center">${p.total_doses}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmtR(p.custo_total)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`
+
+    const secaoHistorico = `
+      <h3 style="font-size:13px;font-weight:700;margin:24px 0 8px">📋 Histórico Completo</h3>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:#343a40;color:#fff">
+          <th style="padding:7px 8px;text-align:left;font-size:10px">Data</th>
+          <th style="padding:7px 8px;text-align:left;font-size:10px">Vacina / Medicamento</th>
+          <th style="padding:7px 8px;text-align:left;font-size:10px">Destino</th>
+          <th style="padding:7px 8px;text-align:left;font-size:10px">Dose</th>
+          <th style="padding:7px 8px;text-align:left;font-size:10px">Marca</th>
+          <th style="padding:7px 8px;text-align:left;font-size:10px">Lote Vacina</th>
+          <th style="padding:7px 8px;text-align:left;font-size:10px">Responsável</th>
+          <th style="padding:7px 8px;text-align:right;font-size:10px">Custo</th>
+        </tr></thead>
+        <tbody>
+          ${relatorio.historico.length === 0
+            ? '<tr><td colspan="8" style="padding:20px;text-align:center;color:#888">Nenhum registro</td></tr>'
+            : relatorio.historico.map((v, i) => `
+              <tr style="background:${i % 2 === 0 ? '#fff' : '#fafafa'}">
+                <td style="padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap">${fmtDate(v.data)}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #eee;font-weight:600">${v.vacina}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #eee">${v.plantel_brinco ? `🐷 ${v.plantel_brinco}` : (v.lote_numero || '-')}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #eee">${v.dose || '-'}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${v.marca_fabricante || '-'}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${v.lote_vacina || '-'}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #eee">${v.responsavel || '-'}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${v.custo ? fmtR(v.custo) : '-'}</td>
+              </tr>`).join('')}
+        </tbody>
+      </table>`
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Relatório de Sanidade — GranjaApp</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size:12px; color:#222; padding:28px 32px; }
+    @media print {
+      body { padding:0; }
+      button { display:none !important; }
+      @page { margin:15mm 15mm 20mm; size:A4; }
+    }
+  </style>
+</head>
+<body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:14px;border-bottom:3px solid #1b5e20">
+    <div>
+      <div style="font-size:22px;font-weight:700;color:#1b5e20;margin-bottom:3px">Relatório de Sanidade — GranjaApp</div>
+      <div style="font-size:11px;color:#666">Gerado em: <strong>${hoje}</strong></div>
+    </div>
+    <button onclick="window.print()" style="padding:9px 20px;background:#1b5e20;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">
+      Imprimir / Salvar PDF
+    </button>
+  </div>
+
+  <div style="display:flex;gap:14px;margin-bottom:24px">
+    <div style="flex:1;border:1px solid #e0e0e0;border-radius:8px;padding:12px 16px;border-top:4px solid #0d6efd">
+      <div style="font-size:28px;font-weight:700;color:#0d6efd">${relatorio.total_doses}</div>
+      <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Total de Doses</div>
+    </div>
+    <div style="flex:1;border:1px solid #e0e0e0;border-radius:8px;padding:12px 16px;border-top:4px solid #1b5e20">
+      <div style="font-size:22px;font-weight:700;color:#1b5e20">${fmtR(relatorio.custo_total)}</div>
+      <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Custo Total</div>
+    </div>
+    <div style="flex:1;border:1px solid #e0e0e0;border-radius:8px;padding:12px 16px;border-top:4px solid #c0392b">
+      <div style="font-size:28px;font-weight:700;color:#c0392b">${relatorio.pendentes_atrasadas.length}</div>
+      <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Atrasadas</div>
+    </div>
+    <div style="flex:1;border:1px solid #e0e0e0;border-radius:8px;padding:12px 16px;border-top:4px solid #6c757d">
+      <div style="font-size:28px;font-weight:700;color:#6c757d">${relatorio.por_vacina.length}</div>
+      <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Vacinas Distintas</div>
+    </div>
+  </div>
+
+  ${secaoAtrasadas}
+  ${secaoVacinas}
+  ${secaoLotes}
+  ${secaoPlantel}
+  ${secaoHistorico}
+
+  <div style="margin-top:44px;display:flex;gap:28px">
+    <div style="flex:1"><div style="border-top:1px solid #555;margin-bottom:6px"></div><div style="font-size:11px;color:#555">Responsável técnico / Veterinário</div></div>
+    <div style="flex:1"><div style="border-top:1px solid #555;margin-bottom:6px"></div><div style="font-size:11px;color:#555">Gerente / Responsável</div></div>
+    <div style="flex:1"><div style="border-top:1px solid #555;margin-bottom:6px"></div><div style="font-size:11px;color:#555">Data de conferência</div></div>
+  </div>
+</body>
+</html>`
+
+    win.document.open()
+    win.document.write(html)
+    win.document.close()
+    setTimeout(() => win.print(), 400)
+  }
+
   // ---- Vacinação handlers ----
   const openCreateVac = (prefill = {}) => {
     setEditingVac(null)
@@ -378,7 +563,12 @@ export default function Sanidade() {
           )}
           {tab === 'vacinacoes' && canWrite() && <button className="btn btn-primary" onClick={() => openCreateVac()}>+ Registrar Vacinação</button>}
           {tab === 'planos' && canWrite() && <button className="btn btn-primary" onClick={openCreatePlano}>+ Novo Plano</button>}
-          {tab === 'relatorio' && <button className="btn btn-outline" onClick={loadRelatorio}>🔄 Atualizar</button>}
+          {tab === 'relatorio' && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-outline" onClick={loadRelatorio}>🔄 Atualizar</button>
+              <button className="btn btn-outline" onClick={gerarPDFRelatorio} disabled={!relatorio}>📄 Gerar PDF</button>
+            </div>
+          )}
         </div>
       </div>
 
