@@ -775,7 +775,7 @@ def delete_lote(lid):
 @app.route('/api/animais', methods=['GET'])
 @jwt_required()
 def get_animais():
-    lote_id = request.args.get('lote_id')
+    lote_id = to_int(request.args.get('lote_id'))
     q = Animal.query.options(joinedload(Animal.lote))
     if lote_id:
         q = q.filter_by(lote_id=lote_id)
@@ -859,7 +859,7 @@ def delete_animal(aid):
 @app.route('/api/vacinacoes', methods=['GET'])
 @jwt_required()
 def get_vacinacoes():
-    lote_id = request.args.get('lote_id')
+    lote_id = to_int(request.args.get('lote_id'))
     q = Vacinacao.query.options(joinedload(Vacinacao.lote))
     if lote_id:
         q = q.filter_by(lote_id=lote_id)
@@ -1302,7 +1302,7 @@ def delete_reproducao(rid):
 @app.route('/api/alimentacoes', methods=['GET'])
 @jwt_required()
 def get_alimentacoes():
-    lote_id = request.args.get('lote_id')
+    lote_id = to_int(request.args.get('lote_id'))
     limit  = min(int(request.args.get('limit', 300)), 2000)
     offset = int(request.args.get('offset', 0))
 
@@ -1483,7 +1483,7 @@ def get_financeiro():
     if not can_gestao(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
     tipo = request.args.get('tipo')
-    lote_id = request.args.get('lote_id')
+    lote_id = to_int(request.args.get('lote_id'))
     q = Financeiro.query
     if tipo:
         q = q.filter_by(tipo=tipo)
@@ -2429,7 +2429,7 @@ def delete_plantel(pid):
 @app.route('/api/pesagens', methods=['GET'])
 @jwt_required()
 def get_pesagens():
-    lote_id = request.args.get('lote_id')
+    lote_id = to_int(request.args.get('lote_id'))
     q = Pesagem.query
     if lote_id:
         q = q.filter_by(lote_id=lote_id)
