@@ -80,7 +80,10 @@ export default function Lotes() {
       const r = await api.get(`/api/pesagens?lote_id=${pesagemLote.id}`)
       setPesagens(r.data)
     } catch (e) {
-      setPesagemError(e.response?.data?.error || 'Erro ao salvar')
+      const msg = e.response?.data?.error || e.response?.data?.message || e.message || 'Erro ao salvar'
+      const status = e.response?.status
+      setPesagemError(status ? `[${status}] ${msg}` : msg)
+      console.error('Erro pesagem:', e.response?.data || e.message || e)
     } finally { setSavingPesagem(false) }
   }
 
