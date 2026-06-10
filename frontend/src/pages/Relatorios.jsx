@@ -184,9 +184,7 @@ export default function Relatorios() {
         ? `<span style="color:${fc};font-weight:700">${l.fase}</span><br><span style="font-size:10px;color:#6c757d">desde ${fmtD(l.data_inicio_fase)}</span>`
         : `<span style="color:${fc};font-weight:700">${l.fase}</span>`
 
-      const diasStr = l.dias_na_fase != null && l.dias_na_fase !== l.dias_producao
-        ? `<strong>${l.dias_na_fase}d</strong><br><span style="font-size:10px;color:#6c757d">${l.dias_producao}d total</span>`
-        : `<strong>${l.dias_na_fase ?? '—'}d</strong>`
+      const diasStr = `<strong>${l.dias_na_fase ?? '—'}d</strong>`
 
       const gmdFaseStr = l.gmd_fase != null
         ? `<strong style="color:${cor};font-size:14px">${Number(l.gmd_fase).toFixed(3)}</strong><br><span style="font-size:10px;color:#6c757d">kg/dia</span>`
@@ -216,26 +214,34 @@ export default function Relatorios() {
         </tr>`
       }).join('')
 
+      const infoRow = `
+        <tr style="background:${rowBg}">
+          <td colspan="${NCOLS}" style="padding:3px 10px 6px 14px;border-bottom:1px solid #e0e0e0;font-size:10px;color:#6c757d">
+            Data de Entrada: <strong>${fmtD(l.data_entrada)}</strong>
+            ${l.dias_na_fase !== l.dias_producao && l.dias_producao != null ? ` &nbsp;·&nbsp; Dias total: <strong>${l.dias_producao}d</strong>` : ''}
+          </td>
+        </tr>`
+
       return `
         <tr style="background:${rowBg}">
-          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;vertical-align:middle">
-            <strong style="font-size:13px">${l.numero}</strong><br>
-            <span style="font-size:10px;color:#6c757d">${fmtD(l.data_entrada)}</span>
+          <td style="padding:9px 10px 6px 10px;border-bottom:none;vertical-align:middle">
+            <strong style="font-size:13px">${l.numero}</strong>
           </td>
-          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;vertical-align:middle">${faseStr}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle">${diasStr}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:right;vertical-align:middle;color:#495057">
+          <td style="padding:9px 10px 6px 10px;border-bottom:none;vertical-align:middle">${faseStr}</td>
+          <td style="padding:9px 10px 6px 10px;border-bottom:none;text-align:center;vertical-align:middle">${diasStr}</td>
+          <td style="padding:9px 10px 6px 10px;border-bottom:none;text-align:right;vertical-align:middle;color:#495057">
             ${fmtKg(l.peso_ref_fase)}
           </td>
-          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:right;vertical-align:middle">
+          <td style="padding:9px 10px 6px 10px;border-bottom:none;text-align:right;vertical-align:middle">
             <strong style="font-size:13px;color:#212529">${fmtKg(l.peso_atual)}</strong>
           </td>
-          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle">${gmdFaseStr}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle;color:#6c757d;font-size:11px">${fmtGmd(l.gmd_total)}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle;color:#6c757d;font-size:11px">${minStr}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle">${pct}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle;font-weight:700;font-size:11px;color:${cor}">${LABEL[l.status_gmd] || '—'}</td>
+          <td style="padding:9px 10px 6px 10px;border-bottom:none;text-align:center;vertical-align:middle">${gmdFaseStr}</td>
+          <td style="padding:9px 10px 6px 10px;border-bottom:none;text-align:center;vertical-align:middle;color:#6c757d;font-size:11px">${fmtGmd(l.gmd_total)}</td>
+          <td style="padding:9px 10px 6px 10px;border-bottom:none;text-align:center;vertical-align:middle;color:#6c757d;font-size:11px">${minStr}</td>
+          <td style="padding:9px 10px 6px 10px;border-bottom:none;text-align:center;vertical-align:middle">${pct}</td>
+          <td style="padding:9px 10px 6px 10px;border-bottom:none;text-align:center;vertical-align:middle;font-weight:700;font-size:11px;color:${cor}">${LABEL[l.status_gmd] || '—'}</td>
         </tr>
+        ${infoRow}
         ${histRows}`
     }).join('')
 
