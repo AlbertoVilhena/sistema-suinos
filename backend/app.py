@@ -92,6 +92,7 @@ class Lote(db.Model):
     quantidade_atual = db.Column(db.Integer, nullable=False)
     peso_medio_entrada = db.Column(db.Float)
     fase = db.Column(db.String(30))  # maternidade, creche, crescimento, terminacao
+    data_inicio_fase = db.Column(db.Date)  # data em que a fase atual começou
     status = db.Column(db.String(20), default='ativo')  # ativo, encerrado, vendido
     observacoes = db.Column(db.Text)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
@@ -113,6 +114,7 @@ class Lote(db.Model):
             'quantidade_atual': self.quantidade_atual,
             'peso_medio_entrada': self.peso_medio_entrada,
             'fase': self.fase,
+            'data_inicio_fase': self.data_inicio_fase.isoformat() if self.data_inicio_fase else None,
             'status': self.status,
             'observacoes': self.observacoes,
             'criado_em': self.criado_em.isoformat()
@@ -740,6 +742,7 @@ def create_lote():
             quantidade_atual=to_int(data.get('quantidade_atual'), qtd),
             peso_medio_entrada=to_float(data.get('peso_medio_entrada')),
             fase=data.get('fase') or None,
+            data_inicio_fase=data_entrada_date,
             status=data.get('status', 'ativo'),
             observacoes=data.get('observacoes') or None,
             usuario_id=u.id
@@ -764,11 +767,19 @@ def update_lote(lid):
     lote = Lote.query.get_or_404(lid)
     data = request.get_json()
 
+    fase_anterior = lote.fase
     for f in ['numero', 'quantidade_atual', 'peso_medio_entrada', 'fase', 'status', 'observacoes']:
         if f in data:
             setattr(lote, f, data[f])
     if 'data_entrada' in data:
         lote.data_entrada = datetime.strptime(data['data_entrada'], '%Y-%m-%d').date()
+
+    # Se o usuário informou explicitamente a data_inicio_fase, respeita
+    if 'data_inicio_fase' in data and data['data_inicio_fase']:
+        lote.data_inicio_fase = datetime.strptime(data['data_inicio_fase'], '%Y-%m-%d').date()
+    elif 'fase' in data and data['fase'] != fase_anterior:
+        # Mudança de fase automática: registra a data de hoje
+        lote.data_inicio_fase = date.today()
 
     db.session.commit()
     return jsonify(lote.to_dict())
@@ -1874,44 +1885,74 @@ GMD_REFERENCIA = {
 }
 
 def calcular_gmd_lote(lote):
-    """Calcula GMD do lote com base nas pesagens registradas."""
+    """Calcula GMD do lote separando GMD da fase atual vs GMD total."""
     pesagens = sorted(lote.pesagens, key=lambda p: p.data)
     hoje = date.today()
     dias_producao = (hoje - lote.data_entrada).days if lote.data_entrada else 0
-
     peso_entrada = lote.peso_medio_entrada or 0
 
-    if len(pesagens) >= 2:
-        dias = (pesagens[-1].data - pesagens[0].data).days
-        ganho = pesagens[-1].peso_medio - pesagens[0].peso_medio
-        gmd = round(ganho / max(dias, 1), 3)
-        peso_atual = pesagens[-1].peso_medio
-        data_ref = pesagens[-1].data
-        fonte = 'pesagens'
-        n_pesagens = len(pesagens)
-    elif len(pesagens) == 1:
-        dias = (pesagens[0].data - lote.data_entrada).days if lote.data_entrada else 0
-        ganho = pesagens[0].peso_medio - peso_entrada
-        gmd = round(ganho / max(dias, 1), 3)
-        peso_atual = pesagens[0].peso_medio
-        data_ref = pesagens[0].data
-        fonte = 'pesagem_unica'
-        n_pesagens = 1
+    # Data em que a fase atual começou (fallback: data_entrada)
+    data_inicio_fase = lote.data_inicio_fase or lote.data_entrada
+
+    # Separa pesagens da fase atual vs fase anterior
+    pesagens_fase = [p for p in pesagens if data_inicio_fase and p.data >= data_inicio_fase]
+    pesagens_anteriores = [p for p in pesagens if data_inicio_fase and p.data < data_inicio_fase]
+
+    # Peso de referência para a fase atual = última pesagem ANTES da troca de fase
+    # Se não houver, usa peso_medio_entrada do lote
+    if pesagens_anteriores:
+        peso_ref_fase = pesagens_anteriores[-1].peso_medio
     else:
-        # Sem pesagens — tenta usar peso_atual dos animais individuais
+        peso_ref_fase = peso_entrada
+
+    # ---- GMD da FASE ATUAL ----
+    gmd_fase = None
+    peso_atual = None
+    n_pesagens_fase = len(pesagens_fase)
+
+    if len(pesagens_fase) >= 2:
+        dias_fase = (pesagens_fase[-1].data - pesagens_fase[0].data).days
+        gmd_fase = round((pesagens_fase[-1].peso_medio - pesagens_fase[0].peso_medio) / max(dias_fase, 1), 3)
+        peso_atual = pesagens_fase[-1].peso_medio
+        fonte_fase = 'pesagens_fase'
+    elif len(pesagens_fase) == 1:
+        dias_fase = (pesagens_fase[0].data - data_inicio_fase).days if data_inicio_fase else 0
+        gmd_fase = round((pesagens_fase[0].peso_medio - peso_ref_fase) / max(dias_fase, 1), 3)
+        peso_atual = pesagens_fase[0].peso_medio
+        fonte_fase = 'pesagem_unica_fase'
+    else:
+        fonte_fase = 'sem_pesagens_fase'
+
+    # ---- GMD TOTAL (toda a vida do lote — informativo) ----
+    gmd_total = None
+    if len(pesagens) >= 2:
+        dias_total = (pesagens[-1].data - pesagens[0].data).days
+        gmd_total = round((pesagens[-1].peso_medio - pesagens[0].peso_medio) / max(dias_total, 1), 3)
+        if peso_atual is None:
+            peso_atual = pesagens[-1].peso_medio
+    elif len(pesagens) == 1:
+        dias_total = (pesagens[0].data - lote.data_entrada).days if lote.data_entrada else 0
+        gmd_total = round((pesagens[0].peso_medio - peso_entrada) / max(dias_total, 1), 3)
+        if peso_atual is None:
+            peso_atual = pesagens[0].peso_medio
+
+    # Se não há pesagens na fase atual nem pesagens antigas, tenta peso individual dos animais
+    if peso_atual is None:
         animais = [a for a in lote.animais if a.status == 'ativo' and a.peso_atual]
         if animais:
             pesos = [a.peso_atual for a in animais]
             peso_atual = sum(pesos) / len(pesos)
             ganho = peso_atual - peso_entrada
-            gmd = round(ganho / max(dias_producao, 1), 3) if dias_producao > 0 else None
-            data_ref = None
-            fonte = 'peso_animal'
-            n_pesagens = 0
+            gmd_fase = round(ganho / max(dias_producao, 1), 3) if dias_producao > 0 else None
+            gmd_total = gmd_fase
+            fonte_fase = 'peso_animal'
         else:
             return None  # Sem dados suficientes
 
-    # Comparar com referência da fase
+    # GMD principal para alertas = fase atual (se disponível) ou total
+    gmd = gmd_fase if gmd_fase is not None else gmd_total
+
+    # Comparar com referência da fase ATUAL
     fase = (lote.fase or '').lower()
     ref = GMD_REFERENCIA.get(fase)
 
@@ -1935,7 +1976,7 @@ def calcular_gmd_lote(lote):
         status = 'ok'
         alerta = None
 
-    # Histórico de GMD por intervalo entre pesagens
+    # Histórico de GMD por intervalo entre pesagens (todas as pesagens, marcando a fase)
     historico = []
     for i in range(len(pesagens) - 1, -1, -1):  # mais recente primeiro
         p = pesagens[i]
@@ -1954,6 +1995,7 @@ def calcular_gmd_lote(lote):
             'total_animais': p.total_animais,
             'gmd_intervalo': g,
             'dias_intervalo': d if p_ant or lote.data_entrada else None,
+            'fase_atual': data_inicio_fase is not None and p.data >= data_inicio_fase,
         })
 
     return {
@@ -1962,12 +2004,19 @@ def calcular_gmd_lote(lote):
         'fase': lote.fase or '-',
         'status': lote.status,
         'data_entrada': lote.data_entrada.isoformat() if lote.data_entrada else None,
+        'data_inicio_fase': data_inicio_fase.isoformat() if data_inicio_fase else None,
+        'fase_desde_entrada': data_inicio_fase == lote.data_entrada if data_inicio_fase and lote.data_entrada else True,
         'dias_producao': dias_producao,
+        'dias_na_fase': (hoje - data_inicio_fase).days if data_inicio_fase else dias_producao,
         'peso_entrada': peso_entrada,
+        'peso_ref_fase': round(peso_ref_fase, 2) if peso_ref_fase else peso_entrada,
         'peso_atual': round(peso_atual, 2),
-        'gmd': gmd,
-        'n_pesagens': n_pesagens,
-        'fonte': fonte,
+        'gmd': gmd,                   # GMD da fase atual (principal — usado para alertas)
+        'gmd_fase': gmd_fase,         # GMD da fase atual explícito
+        'gmd_total': gmd_total,       # GMD total da vida do lote (informativo)
+        'n_pesagens': len(pesagens),
+        'n_pesagens_fase': n_pesagens_fase,
+        'fonte': fonte_fase,
         'status_gmd': status,
         'alerta': alerta,
         'pct_ideal': pct_ideal,
@@ -2531,6 +2580,10 @@ def init_db():
             "CREATE INDEX IF NOT EXISTS idx_formulacao_itens_formulacao_id ON formulacao_itens(formulacao_id)",
             "CREATE INDEX IF NOT EXISTS idx_formulacao_itens_ingrediente_id ON formulacao_itens(ingrediente_id)",
             "CREATE INDEX IF NOT EXISTS idx_pesagens_lote_id ON pesagens(lote_id)",
+            # GMD por fase
+            "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS data_inicio_fase DATE",
+            # Retroativamente preenche lotes existentes com data_entrada (fase desde o início)
+            "UPDATE lotes SET data_inicio_fase = data_entrada WHERE data_inicio_fase IS NULL",
         ]
         with db.engine.connect() as conn:
             for sql in migrations:

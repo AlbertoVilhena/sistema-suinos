@@ -392,11 +392,11 @@ export default function Relatorios() {
                         <th>Lote</th>
                         <th>Fase</th>
                         <th>Status</th>
-                        <th>Dias prod.</th>
-                        <th>Peso entrada</th>
+                        <th>Dias na fase</th>
+                        <th>Peso ref. fase</th>
                         <th>Peso atual</th>
-                        <th>Ganho total</th>
-                        <th>GMD atual</th>
+                        <th>GMD fase ⚡</th>
+                        <th>GMD total</th>
                         <th>Mín. esperado</th>
                         <th>Ideal</th>
                         <th>% do ideal</th>
@@ -409,26 +409,39 @@ export default function Relatorios() {
                         <tr><td colSpan={13} className="table-empty">Nenhum lote com dados de pesagem</td></tr>
                       ) : relGmd.lotes.map(l => {
                         const st = GMD_STATUS[l.status_gmd] || GMD_STATUS.sem_dados
-                        const ganho = l.peso_atual - l.peso_entrada
                         const pctCor = l.pct_ideal >= 100 ? '#198754' : l.pct_ideal >= 70 ? '#856404' : '#dc3545'
+                        const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
                         return (
                           <tr key={l.lote_id} style={{ background: l.status_gmd === 'critico' ? '#fff5f5' : l.status_gmd === 'alerta' ? '#fffbf0' : 'inherit' }}>
                             <td>
                               <strong>{l.numero}</strong>
-                              <div style={{ fontSize: 10, color: '#6c757d' }}>{l.data_entrada ? new Date(l.data_entrada + 'T00:00:00').toLocaleDateString('pt-BR') : '-'}</div>
+                              <div style={{ fontSize: 10, color: '#6c757d' }}>entrada: {fmtDate(l.data_entrada)}</div>
                             </td>
                             <td>
                               <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: (FASE_COR[l.fase?.toLowerCase()] || '#6c757d') + '20', color: FASE_COR[l.fase?.toLowerCase()] || '#6c757d', fontWeight: 600 }}>
                                 {l.fase}
                               </span>
+                              {!l.fase_desde_entrada && l.data_inicio_fase && (
+                                <div style={{ fontSize: 10, color: '#6c757d', marginTop: 2 }}>desde {fmtDate(l.data_inicio_fase)}</div>
+                              )}
                             </td>
                             <td><span className={`badge ${l.status === 'ativo' ? 'badge-green' : l.status === 'vendido' ? 'badge-blue' : 'badge-gray'}`}>{l.status}</span></td>
-                            <td>{l.dias_producao}d</td>
-                            <td>{l.peso_entrada > 0 ? `${l.peso_entrada} kg` : '-'}</td>
+                            <td>
+                              <span style={{ fontWeight: 600 }}>{l.dias_na_fase}d</span>
+                              {l.dias_na_fase !== l.dias_producao && (
+                                <div style={{ fontSize: 10, color: '#6c757d' }}>{l.dias_producao}d total</div>
+                              )}
+                            </td>
+                            <td style={{ color: '#6c757d' }}>{l.peso_ref_fase > 0 ? `${l.peso_ref_fase} kg` : '-'}</td>
                             <td style={{ fontWeight: 600 }}>{l.peso_atual} kg</td>
-                            <td style={{ color: ganho > 0 ? '#198754' : '#dc3545' }}>{ganho > 0 ? '+' : ''}{ganho.toFixed(1)} kg</td>
                             <td style={{ fontWeight: 700, fontSize: 13, color: l.status_gmd === 'critico' ? '#dc3545' : l.status_gmd === 'alerta' ? '#856404' : '#198754' }}>
-                              {l.gmd != null ? `${l.gmd.toFixed(3)} kg/d` : '-'}
+                              {l.gmd_fase != null ? `${l.gmd_fase.toFixed(3)} kg/d` : '—'}
+                              {l.n_pesagens_fase != null && l.n_pesagens_fase < 2 && l.gmd_fase != null && (
+                                <div style={{ fontSize: 9, color: '#6c757d', fontWeight: 400 }}>1 pesagem</div>
+                              )}
+                            </td>
+                            <td style={{ color: '#6c757d', fontSize: 11 }}>
+                              {l.gmd_total != null ? `${l.gmd_total.toFixed(3)} kg/d` : '—'}
                             </td>
                             <td style={{ color: '#6c757d' }}>{l.ref_min != null ? `${l.ref_min} kg/d` : '-'}</td>
                             <td style={{ color: '#6c757d' }}>{l.ref_ideal != null ? `${l.ref_ideal} kg/d` : '-'}</td>
@@ -463,13 +476,15 @@ export default function Relatorios() {
                   <div key={`hist-${l.lote_id}`} style={{ marginTop: 12, padding: '12px 14px', background: '#f8f9fa', borderRadius: 8, border: '1px solid #dee2e6' }}>
                     <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#495057' }}>
                       📋 Histórico de pesagens — Lote {l.numero}
+                      {!l.fase_desde_entrada && <span style={{ fontSize: 11, color: '#6c757d', fontWeight: 400, marginLeft: 8 }}>⚡ = pesagens usadas no GMD da fase atual</span>}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {l.historico_pesagens.map((p, i) => {
                         const ref = relGmd.referencias[l.fase?.toLowerCase()]
                         const gmdOk = p.gmd_intervalo != null && ref ? p.gmd_intervalo >= ref.min : null
                         return (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, padding: '6px 10px', background: '#fff', borderRadius: 6, border: '1px solid #e9ecef' }}>
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, padding: '6px 10px', background: p.fase_atual ? '#f0fff4' : '#fff', borderRadius: 6, border: `1px solid ${p.fase_atual ? '#a3cfbb' : '#e9ecef'}` }}>
+                            {!l.fase_desde_entrada && <span title={p.fase_atual ? 'Fase atual' : 'Fase anterior'} style={{ fontSize: 14 }}>{p.fase_atual ? '⚡' : '◦'}</span>}
                             <span style={{ color: '#6c757d', minWidth: 80 }}>{new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                             <span style={{ fontWeight: 600, color: '#198754' }}>{p.peso_medio} kg</span>
                             {p.total_animais && <span style={{ color: '#6c757d' }}>{p.total_animais} animais</span>}

@@ -16,7 +16,7 @@ const today = new Date().toISOString().split('T')[0]
 
 const emptyForm = {
   numero: '', data_entrada: today, quantidade_inicial: '', quantidade_atual: '',
-  peso_medio_entrada: '', fase: 'creche', status: 'ativo', observacoes: ''
+  peso_medio_entrada: '', fase: 'creche', data_inicio_fase: today, status: 'ativo', observacoes: ''
 }
 
 const emptyPesagem = { data: today, peso_medio: '', total_animais: '', observacoes: '' }
@@ -53,7 +53,7 @@ export default function Lotes() {
   const openCreate = () => { setEditing(null); setForm(emptyForm); setError(''); setShowModal(true) }
   const openEdit = (l) => {
     setEditing(l)
-    setForm({ ...l, peso_medio_entrada: l.peso_medio_entrada || '' })
+    setForm({ ...l, peso_medio_entrada: l.peso_medio_entrada || '', data_inicio_fase: l.data_inicio_fase || l.data_entrada || today })
     setError('')
     setShowModal(true)
   }
@@ -201,7 +201,12 @@ export default function Lotes() {
                       ? <span title={l.ultima_pesagem_data ? `Pesagem: ${fmtData(l.ultima_pesagem_data)}` : ''}>{fmtNum(l.ultimo_peso, 1)} kg</span>
                       : l.peso_medio_entrada ? `${l.peso_medio_entrada} kg` : '-'}
                   </td>
-                  <td data-label="Fase"><span className={`badge ${faseBadge[l.fase] || 'badge-gray'}`}>{l.fase || '-'}</span></td>
+                  <td data-label="Fase">
+                    <span className={`badge ${faseBadge[l.fase] || 'badge-gray'}`}>{l.fase || '-'}</span>
+                    {l.data_inicio_fase && l.data_inicio_fase !== l.data_entrada && (
+                      <div style={{ fontSize: 10, color: '#6c757d', marginTop: 2 }}>desde {fmtData(l.data_inicio_fase)}</div>
+                    )}
+                  </td>
                   <td data-label="Status"><span className={`badge ${statusBadge[l.status] || 'badge-gray'}`}>{l.status}</span></td>
                   <td data-label="">
                     <div className="actions">
@@ -323,13 +328,26 @@ export default function Lotes() {
             </div>
             <div className="form-group">
               <label>Fase</label>
-              <select value={form.fase} onChange={e => set('fase', e.target.value)}>
+              <select value={form.fase} onChange={e => {
+                const novaFase = e.target.value
+                set('fase', novaFase)
+                if (editing && novaFase !== editing.fase) {
+                  set('data_inicio_fase', today)
+                }
+              }}>
                 <option value="">Selecione</option>
                 <option value="maternidade">Maternidade</option>
                 <option value="creche">Creche</option>
                 <option value="crescimento">Crescimento</option>
                 <option value="terminacao">Terminação</option>
               </select>
+            </div>
+            <div className="form-group">
+              <label>
+                Data início da fase
+                <span style={{ fontSize: 11, color: '#6c757d', marginLeft: 6 }}>(auto ao trocar fase)</span>
+              </label>
+              <input type="date" value={form.data_inicio_fase || ''} onChange={e => set('data_inicio_fase', e.target.value)} />
             </div>
             <div className="form-group">
               <label>Status</label>
