@@ -162,65 +162,104 @@ export default function Relatorios() {
     if (!win) { alert('Pop-up bloqueado. Permita pop-ups para este site.'); return }
 
     const hoje = new Date().toLocaleDateString('pt-BR')
-    const fmtD = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
-    const fmtG = (v) => v != null ? `${Number(v).toFixed(3)} kg/d` : '—'
+    const fmtD = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—'
+    const fmtKg = (v) => v != null && v > 0 ? `${Number(v).toFixed(2)} kg` : '—'
+    const fmtGmd = (v) => v != null ? `${Number(v).toFixed(3)} kg/d` : '—'
 
-    const statusCor = { ok: '#198754', alerta: '#856404', critico: '#dc3545', sem_dados: '#6c757d', aguardando: '#0d6efd' }
-    const statusLabel = { ok: '✅ Normal', alerta: '⚠️ Abaixo', critico: '🔴 Crítico', sem_dados: '— Sem dados', aguardando: '⏳ Aguardando' }
-    const faseCor = { maternidade: '#9c27b0', creche: '#1976d2', crescimento: '#009688', terminacao: '#f57c00' }
+    const COR   = { ok: '#198754', alerta: '#856404', critico: '#dc3545', sem_dados: '#6c757d', aguardando: '#0d6efd' }
+    const LABEL = { ok: '✅ Normal', alerta: '⚠️ Abaixo mín.', critico: '🔴 Crítico', sem_dados: '— Sem dados', aguardando: '⏳ Aguardando' }
+    const FASE  = { maternidade: '#9c27b0', creche: '#1976d2', crescimento: '#009688', terminacao: '#f57c00' }
+
+    // 10 columns: Lote | Fase | Dias fase | Peso Ref. | Peso Atual | GMD Fase | GMD Total | Mín. | % Ideal | Status
+    const NCOLS = 10
 
     const linhasLotes = relGmd.lotes.map((l, i) => {
-      const cor = statusCor[l.status_gmd] || '#6c757d'
-      const fc = faseCor[l.fase?.toLowerCase()] || '#6c757d'
-      const rowBg = l.status_gmd === 'critico' ? '#fff5f5' : l.status_gmd === 'alerta' ? '#fffbf0' : (i % 2 === 0 ? '#fff' : '#fafafa')
-      const pct = l.pct_ideal != null ? `${l.pct_ideal}%` : '—'
-      const diasStr = l.dias_na_fase !== l.dias_producao
-        ? `${l.dias_na_fase}d <span style="color:#6c757d;font-size:10px">(${l.dias_producao}d total)</span>`
-        : `${l.dias_na_fase}d`
+      const cor  = COR[l.status_gmd]  || '#6c757d'
+      const fc   = FASE[l.fase?.toLowerCase()] || '#6c757d'
+      const rowBg = l.status_gmd === 'critico' ? '#fff8f8'
+                  : l.status_gmd === 'alerta'  ? '#fffcf0'
+                  : (i % 2 === 0 ? '#fff' : '#f9fafb')
+
       const faseStr = l.fase_desde_entrada === false && l.data_inicio_fase
-        ? `<span style="color:${fc};font-weight:600">${l.fase}</span><br><span style="font-size:10px;color:#6c757d">desde ${fmtD(l.data_inicio_fase)}</span>`
-        : `<span style="color:${fc};font-weight:600">${l.fase}</span>`
+        ? `<span style="color:${fc};font-weight:700">${l.fase}</span><br><span style="font-size:10px;color:#6c757d">desde ${fmtD(l.data_inicio_fase)}</span>`
+        : `<span style="color:${fc};font-weight:700">${l.fase}</span>`
+
+      const diasStr = l.dias_na_fase != null && l.dias_na_fase !== l.dias_producao
+        ? `<strong>${l.dias_na_fase}d</strong><br><span style="font-size:10px;color:#6c757d">${l.dias_producao}d total</span>`
+        : `<strong>${l.dias_na_fase ?? '—'}d</strong>`
+
       const gmdFaseStr = l.gmd_fase != null
-        ? `<strong style="color:${cor};font-size:13px">${Number(l.gmd_fase).toFixed(3)}</strong><br><span style="font-size:10px;color:#495057">kg/dia</span>`
-        : `<span style="color:#0d6efd;font-size:11px;font-weight:600">⏳ Aguard. 2ª pesagem</span>`
+        ? `<strong style="color:${cor};font-size:14px">${Number(l.gmd_fase).toFixed(3)}</strong><br><span style="font-size:10px;color:#6c757d">kg/dia</span>`
+        : `<span style="color:#0d6efd;font-size:11px;font-weight:700">⏳ Aguard.<br>2ª pesagem</span>`
+
+      const pct = l.pct_ideal != null ? `<strong style="color:${cor}">${l.pct_ideal}%</strong>` : '—'
+
+      const refMins = relGmd.referencias[l.fase?.toLowerCase()]
+      const minStr = refMins ? `${refMins.min}` : '—'
+
       const histRows = (l.historico_pesagens || []).map(p => {
         const ref = relGmd.referencias[l.fase?.toLowerCase()]
-        const ok = p.gmd_intervalo != null && ref ? p.gmd_intervalo >= ref.min : null
-        return `<tr style="font-size:10px;color:#555">
-          <td style="padding:3px 8px;padding-left:24px" colspan="2">${p.fase_atual ? '⚡' : '◦'} ${fmtD(p.data)}</td>
-          <td style="padding:3px 8px">${p.peso_medio} kg</td>
-          <td colspan="4" style="padding:3px 8px;color:${ok === false ? '#dc3545' : ok === true ? '#198754' : '#666'}">
-            ${p.gmd_intervalo != null ? `${p.gmd_intervalo.toFixed(3)} kg/dia (${p.dias_intervalo || '?'}d)` : '—'}
+        const gOk = p.gmd_intervalo != null && ref ? p.gmd_intervalo >= ref.min : null
+        const gCor = gOk === false ? '#dc3545' : gOk === true ? '#198754' : '#666'
+        return `<tr style="background:#f5f7fa">
+          <td style="padding:4px 10px 4px 28px;border-bottom:1px solid #eee;font-size:10px;color:#555">
+            ${p.fase_atual ? '⚡' : '◦'} ${fmtD(p.data)}
           </td>
+          <td colspan="2" style="padding:4px 10px;border-bottom:1px solid #eee;font-size:10px;color:#555"></td>
+          <td style="padding:4px 10px;border-bottom:1px solid #eee;font-size:10px;color:#555;text-align:right"></td>
+          <td style="padding:4px 10px;border-bottom:1px solid #eee;font-size:10px;font-weight:600;color:#212529;text-align:right">${Number(p.peso_medio).toFixed(2)} kg</td>
+          <td style="padding:4px 10px;border-bottom:1px solid #eee;font-size:10px;color:${gCor};text-align:center;font-weight:600">
+            ${p.gmd_intervalo != null ? `${p.gmd_intervalo.toFixed(3)} kg/d` : '—'}
+            ${p.dias_intervalo ? `<span style="color:#888;font-weight:400"> (${p.dias_intervalo}d)</span>` : ''}
+          </td>
+          <td colspan="4" style="padding:4px 10px;border-bottom:1px solid #eee"></td>
         </tr>`
       }).join('')
+
       return `
         <tr style="background:${rowBg}">
-          <td style="padding:9px 10px;border-bottom:1px solid #eee"><strong>${l.numero}</strong><br><span style="font-size:10px;color:#999">${fmtD(l.data_entrada)}</span></td>
-          <td style="padding:9px 10px;border-bottom:1px solid #eee">${faseStr}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center">${diasStr}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:right"><span style="color:#888;font-size:10px">Ref: </span>${l.peso_ref_fase > 0 ? l.peso_ref_fase + ' kg' : '—'}<br><span style="font-size:10px;color:#888">Atual: </span><strong style="font-size:12px;color:#212529">${l.peso_atual != null ? l.peso_atual + ' kg' : '—'}</strong></td>
-          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center">${gmdFaseStr}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#666;font-size:11px">${fmtG(l.gmd_total)}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#666;font-size:11px">${l.ref_min != null ? l.ref_min : '—'}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:${cor}">${pct}</td>
-          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;font-size:11px;font-weight:700;color:${cor}">${statusLabel[l.status_gmd] || '—'}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;vertical-align:middle">
+            <strong style="font-size:13px">${l.numero}</strong><br>
+            <span style="font-size:10px;color:#6c757d">${fmtD(l.data_entrada)}</span>
+          </td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;vertical-align:middle">${faseStr}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle">${diasStr}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:right;vertical-align:middle;color:#495057">
+            ${fmtKg(l.peso_ref_fase)}
+          </td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:right;vertical-align:middle">
+            <strong style="font-size:13px;color:#212529">${fmtKg(l.peso_atual)}</strong>
+          </td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle">${gmdFaseStr}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle;color:#6c757d;font-size:11px">${fmtGmd(l.gmd_total)}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle;color:#6c757d;font-size:11px">${minStr}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle">${pct}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #e0e0e0;text-align:center;vertical-align:middle;font-weight:700;font-size:11px;color:${cor}">${LABEL[l.status_gmd] || '—'}</td>
         </tr>
         ${histRows}`
     }).join('')
 
-    const alertasHTML = relGmd.lotes.filter(l => l.status_gmd === 'critico' || l.status_gmd === 'alerta').map(l => `
-      <div style="display:flex;gap:10px;align-items:center;padding:8px 14px;margin-bottom:8px;background:${l.status_gmd === 'critico' ? '#fff5f5' : '#fffbf0'};border:1px solid ${l.status_gmd === 'critico' ? '#f5c2c7' : '#ffe69c'};border-radius:6px;font-size:12px">
-        <span style="font-size:18px">${l.status_gmd === 'critico' ? '🔴' : '⚠️'}</span>
-        <div>
-          <strong>${l.numero}</strong> — ${l.fase}
-          ${l.alerta ? `<span style="color:${l.status_gmd === 'critico' ? '#dc3545' : '#856404'}"> · ${l.alerta}</span>` : ''}
-        </div>
-      </div>`).join('')
+    const alertasHTML = relGmd.lotes
+      .filter(l => l.status_gmd === 'critico' || l.status_gmd === 'alerta')
+      .map(l => `
+        <div style="display:flex;gap:10px;align-items:center;padding:8px 14px;margin-bottom:6px;background:${l.status_gmd === 'critico' ? '#fff5f5' : '#fffbf0'};border-left:4px solid ${l.status_gmd === 'critico' ? '#dc3545' : '#f0ad4e'};border-radius:0 6px 6px 0;font-size:12px">
+          <span style="font-size:16px">${l.status_gmd === 'critico' ? '🔴' : '⚠️'}</span>
+          <div>
+            <strong>${l.numero}</strong> <span style="color:#6c757d">— ${l.fase}</span>
+            ${l.alerta ? `<span style="color:${l.status_gmd === 'critico' ? '#dc3545' : '#856404'}"> · ${l.alerta}</span>` : ''}
+          </div>
+        </div>`).join('')
 
-    const refsHTML = Object.entries(relGmd.referencias).map(([fase, ref]) =>
-      `<span style="font-size:11px;padding:3px 10px;border-radius:12px;background:${(faseCor[fase] || '#6c757d')}18;border:1px solid ${(faseCor[fase] || '#6c757d')}44;color:${faseCor[fase] || '#6c757d'};font-weight:600;margin-right:6px">${ref.label}: mín ${ref.min} · ideal ${ref.ideal} kg/dia</span>`
-    ).join('')
+    const refsHTML = Object.entries(relGmd.referencias).map(([fase, ref]) => {
+      const fc = FASE[fase] || '#6c757d'
+      return `<span style="display:inline-block;font-size:11px;padding:3px 10px;border-radius:12px;background:${fc}18;border:1px solid ${fc}55;color:${fc};font-weight:600;margin-right:6px;margin-bottom:4px">${ref.label}: mín <strong>${ref.min}</strong> · ideal <strong>${ref.ideal}</strong> kg/dia</span>`
+    }).join('')
+
+    const totalLotes  = relGmd.lotes.length
+    const nOk         = relGmd.resumo?.ok ?? relGmd.lotes.filter(l => l.status_gmd === 'ok').length
+    const nAlerta     = relGmd.resumo?.alertas_atencao ?? relGmd.lotes.filter(l => l.status_gmd === 'alerta').length
+    const nCritico    = relGmd.resumo?.alertas_criticos ?? relGmd.lotes.filter(l => l.status_gmd === 'critico').length
+    const nAguardando = relGmd.lotes.filter(l => l.status_gmd === 'aguardando').length
 
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -229,69 +268,92 @@ export default function Relatorios() {
   <title>Relatório GMD — GranjaApp</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#222;padding:24px 28px}
-    @media print{body{padding:0}button{display:none!important}@page{margin:12mm 12mm 16mm;size:A4 landscape}}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#212529;background:#fff;padding:20px 24px}
+    table{border-collapse:collapse;width:100%}
+    th{font-weight:700;white-space:nowrap}
+    td,th{vertical-align:middle}
+    @media print{
+      body{padding:0}
+      button{display:none!important}
+      @page{margin:10mm 12mm 14mm;size:A4 landscape}
+    }
   </style>
 </head>
 <body>
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-bottom:12px;border-bottom:3px solid #1b5e20">
+
+  <!-- Cabeçalho -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:10px;border-bottom:3px solid #1b5e20">
     <div>
-      <div style="font-size:20px;font-weight:700;color:#1b5e20;margin-bottom:3px">GMD — Ganho Médio Diário · GranjaApp</div>
-      <div style="font-size:11px;color:#666">Gerado em: <strong>${hoje}</strong></div>
+      <div style="font-size:18px;font-weight:700;color:#1b5e20;letter-spacing:-.3px">GMD — Ganho Médio Diário · GranjaApp</div>
+      <div style="font-size:11px;color:#6c757d;margin-top:2px">Gerado em: <strong>${hoje}</strong> &nbsp;·&nbsp; ${totalLotes} lote${totalLotes !== 1 ? 's' : ''} analisado${totalLotes !== 1 ? 's' : ''}</div>
     </div>
-    <button onclick="window.print()" style="padding:8px 18px;background:#1b5e20;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">Imprimir / Salvar PDF</button>
+    <button onclick="window.print()" style="padding:7px 16px;background:#1b5e20;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600">🖨 Imprimir / Salvar PDF</button>
   </div>
 
-  <div style="display:flex;gap:12px;margin-bottom:18px">
+  <!-- Cards resumo -->
+  <div style="display:flex;gap:10px;margin-bottom:16px">
     ${[
-      { v: relGmd.resumo?.com_dados ?? relGmd.lotes.length, l: 'Com dados', c: '#0d6efd' },
-      { v: relGmd.resumo?.ok ?? 0, l: 'GMD Normal', c: '#198754' },
-      { v: relGmd.resumo?.alertas_atencao ?? 0, l: 'Abaixo mín.', c: '#856404' },
-      { v: relGmd.resumo?.alertas_criticos ?? 0, l: 'GMD Crítico', c: '#dc3545' },
-    ].map(s => `<div style="flex:1;border:1px solid #e0e0e0;border-radius:7px;padding:10px 14px;border-top:4px solid ${s.c}">
-      <div style="font-size:26px;font-weight:700;color:${s.c}">${s.v}</div>
-      <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${s.l}</div>
+      { v: totalLotes,   l: 'Total de Lotes',  c: '#0d6efd' },
+      { v: nOk,          l: 'GMD Normal',      c: '#198754' },
+      { v: nAguardando,  l: 'Aguardando',      c: '#0d6efd' },
+      { v: nAlerta,      l: 'Abaixo Mín.',     c: '#856404' },
+      { v: nCritico,     l: 'GMD Crítico',     c: '#dc3545' },
+    ].map(s => `<div style="flex:1;border:1px solid #dee2e6;border-radius:6px;padding:10px 12px;border-top:3px solid ${s.c};text-align:center">
+      <div style="font-size:28px;font-weight:700;color:${s.c};line-height:1">${s.v}</div>
+      <div style="font-size:9px;color:#6c757d;text-transform:uppercase;letter-spacing:.6px;margin-top:4px">${s.l}</div>
     </div>`).join('')}
   </div>
 
-  ${alertasHTML ? `<div style="margin-bottom:18px">${alertasHTML}</div>` : ''}
+  <!-- Alertas -->
+  ${alertasHTML ? `<div style="margin-bottom:14px">${alertasHTML}</div>` : ''}
 
-  <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:4px">${refsHTML}</div>
+  <!-- Benchmarks por fase -->
+  <div style="margin-bottom:10px;padding:8px 12px;background:#f8f9fa;border-radius:6px;border:1px solid #e9ecef">
+    <span style="font-size:10px;font-weight:700;color:#495057;text-transform:uppercase;letter-spacing:.5px;margin-right:8px">Referências:</span>
+    ${refsHTML}
+  </div>
 
-  <table style="width:100%;border-collapse:collapse">
+  <!-- Tabela principal -->
+  <table>
     <thead>
-      <tr style="background:#1b5e20;color:#fff">
-        <th style="padding:8px 10px;text-align:left;font-size:11px;width:10%">Lote</th>
-        <th style="padding:8px 10px;text-align:left;font-size:11px;width:12%">Fase</th>
-        <th style="padding:8px 10px;text-align:center;font-size:11px;width:9%">Dias fase</th>
-        <th style="padding:8px 10px;text-align:right;font-size:11px;width:13%">Peso ref → atual</th>
-        <th style="padding:8px 10px;text-align:center;font-size:11px;width:13%">GMD fase ⚡</th>
-        <th style="padding:8px 10px;text-align:center;font-size:11px;width:10%">GMD total</th>
-        <th style="padding:8px 10px;text-align:center;font-size:11px;width:8%">Mín.</th>
-        <th style="padding:8px 10px;text-align:center;font-size:11px;width:8%">% ideal</th>
-        <th style="padding:8px 10px;text-align:center;font-size:11px;width:12%">Status</th>
+      <tr style="background:#1b5e20;color:#fff;font-size:11px">
+        <th style="padding:8px 10px;text-align:left;width:9%">LOTE</th>
+        <th style="padding:8px 10px;text-align:left;width:11%">FASE</th>
+        <th style="padding:8px 10px;text-align:center;width:8%">DIAS<br>FASE</th>
+        <th style="padding:8px 10px;text-align:right;width:8%">PESO<br>REF.</th>
+        <th style="padding:8px 10px;text-align:right;width:8%">PESO<br>ATUAL</th>
+        <th style="padding:8px 10px;text-align:center;width:12%">GMD FASE ⚡</th>
+        <th style="padding:8px 10px;text-align:center;width:10%">GMD TOTAL</th>
+        <th style="padding:8px 10px;text-align:center;width:7%">MÍN.</th>
+        <th style="padding:8px 10px;text-align:center;width:7%">% IDEAL</th>
+        <th style="padding:8px 10px;text-align:center;width:11%">STATUS</th>
       </tr>
     </thead>
     <tbody>
       ${relGmd.lotes.length === 0
-        ? '<tr><td colspan="9" style="padding:30px;text-align:center;color:#888">Nenhum lote com dados de pesagem</td></tr>'
+        ? `<tr><td colspan="${NCOLS}" style="padding:30px;text-align:center;color:#6c757d">Nenhum lote com dados de pesagem</td></tr>`
         : linhasLotes}
     </tbody>
   </table>
 
+  <!-- Lotes sem dados -->
   ${relGmd.sem_dados?.length > 0 ? `
-    <div style="margin-top:20px">
-      <div style="font-size:12px;font-weight:700;color:#6c757d;margin-bottom:8px">⚫ Lotes sem dados de GMD</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${relGmd.sem_dados.map(l => `<span style="padding:4px 12px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:12px;font-size:12px"><strong>${l.numero}</strong> · ${l.fase} · ${l.motivo}</span>`).join('')}
+    <div style="margin-top:16px;padding:10px 14px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px">
+      <div style="font-size:11px;font-weight:700;color:#6c757d;margin-bottom:6px">⚫ LOTES SEM DADOS DE GMD</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${relGmd.sem_dados.map(l => `<span style="padding:3px 10px;background:#fff;border:1px solid #dee2e6;border-radius:10px;font-size:11px"><strong>${l.numero}</strong> · ${l.fase || '—'} · <span style="color:#6c757d">${l.motivo || 'sem pesagem'}</span></span>`).join('')}
       </div>
     </div>` : ''}
 
-  <div style="margin-top:36px;display:flex;gap:24px">
-    <div style="flex:1"><div style="border-top:1px solid #555;margin-bottom:6px"></div><div style="font-size:11px;color:#555">Responsável técnico / Veterinário</div></div>
-    <div style="flex:1"><div style="border-top:1px solid #555;margin-bottom:6px"></div><div style="font-size:11px;color:#555">Gerente / Responsável</div></div>
-    <div style="flex:1"><div style="border-top:1px solid #555;margin-bottom:6px"></div><div style="font-size:11px;color:#555">Data de conferência</div></div>
+  <!-- Assinaturas -->
+  <div style="margin-top:32px;display:flex;gap:24px;padding-top:4px">
+    ${['Responsável Técnico / Veterinário', 'Gerente / Responsável', 'Data de Conferência'].map(label => `
+      <div style="flex:1">
+        <div style="border-top:1px solid #adb5bd;margin-bottom:6px"></div>
+        <div style="font-size:10px;color:#6c757d;text-align:center">${label}</div>
+      </div>`).join('')}
   </div>
+
 </body>
 </html>`
 
