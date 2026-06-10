@@ -77,8 +77,11 @@ export default function Lotes() {
     try {
       await api.post('/api/pesagens', { ...pesagemForm, lote_id: pesagemLote.id })
       setPesagemForm({ ...emptyPesagem, total_animais: pesagemLote.quantidade_atual || '' })
-      const r = await api.get(`/api/pesagens?lote_id=${pesagemLote.id}`)
-      setPesagens(r.data)
+      const [pesagensRes] = await Promise.all([
+        api.get(`/api/pesagens?lote_id=${pesagemLote.id}`),
+        api.get('/api/lotes').then(r => setLotes(r.data))
+      ])
+      setPesagens(pesagensRes.data)
     } catch (e) {
       const msg = e.response?.data?.error || e.response?.data?.message || e.message || 'Erro ao salvar'
       const status = e.response?.status
@@ -193,7 +196,11 @@ export default function Lotes() {
                   <td data-label="Data Entrada">{fmtData(l.data_entrada)}</td>
                   <td data-label="Qtd Inicial">{l.quantidade_inicial}</td>
                   <td data-label="Qtd Atual">{l.quantidade_atual}</td>
-                  <td data-label="Peso Médio">{l.peso_medio_entrada ? `${l.peso_medio_entrada} kg` : '-'}</td>
+                  <td data-label="Peso Médio">
+                    {l.ultimo_peso != null
+                      ? <span title={l.ultima_pesagem_data ? `Pesagem: ${fmtData(l.ultima_pesagem_data)}` : ''}>{fmtNum(l.ultimo_peso, 1)} kg</span>
+                      : l.peso_medio_entrada ? `${l.peso_medio_entrada} kg` : '-'}
+                  </td>
                   <td data-label="Fase"><span className={`badge ${faseBadge[l.fase] || 'badge-gray'}`}>{l.fase || '-'}</span></td>
                   <td data-label="Status"><span className={`badge ${statusBadge[l.status] || 'badge-gray'}`}>{l.status}</span></td>
                   <td data-label="">

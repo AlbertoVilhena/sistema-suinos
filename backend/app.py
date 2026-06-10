@@ -675,7 +675,24 @@ def delete_usuario(uid):
 @jwt_required()
 def get_lotes():
     lotes = Lote.query.order_by(Lote.criado_em.desc()).all()
-    return jsonify([l.to_dict() for l in lotes])
+    # Busca a pesagem mais recente de cada lote em uma única query
+    subq = db.session.query(
+        Pesagem.lote_id,
+        func.max(Pesagem.data).label('ultima_data')
+    ).group_by(Pesagem.lote_id).subquery()
+    latest_pesagens = db.session.query(Pesagem).join(
+        subq,
+        (Pesagem.lote_id == subq.c.lote_id) & (Pesagem.data == subq.c.ultima_data)
+    ).all()
+    pesagem_map = {p.lote_id: p for p in latest_pesagens}
+    result = []
+    for l in lotes:
+        d = l.to_dict()
+        ult = pesagem_map.get(l.id)
+        d['ultimo_peso'] = ult.peso_medio if ult else None
+        d['ultima_pesagem_data'] = ult.data.isoformat() if ult else None
+        result.append(d)
+    return jsonify(result)
 
 
 @app.route('/api/lotes/<int:lid>', methods=['GET'])
