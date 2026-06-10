@@ -184,7 +184,9 @@ export default function Relatorios() {
         ? `<span style="color:${fc};font-weight:700">${l.fase}</span><br><span style="font-size:10px;color:#6c757d">desde ${fmtD(l.data_inicio_fase)}</span>`
         : `<span style="color:${fc};font-weight:700">${l.fase}</span>`
 
-      const diasStr = `<strong>${l.dias_na_fase ?? '—'}d</strong>`
+      const diasStr = l.dias_na_fase != null && l.dias_na_fase !== l.dias_producao
+        ? `<strong>${l.dias_na_fase}d</strong>`
+        : '—'
 
       const gmdFaseStr = l.gmd_fase != null
         ? `<strong style="color:${cor};font-size:14px">${Number(l.gmd_fase).toFixed(3)}</strong><br><span style="font-size:10px;color:#6c757d">kg/dia</span>`
@@ -218,7 +220,7 @@ export default function Relatorios() {
         <tr style="background:${rowBg}">
           <td colspan="${NCOLS}" style="padding:3px 10px 6px 14px;border-bottom:1px solid #e0e0e0;font-size:10px;color:#6c757d">
             Data de Entrada: <strong>${fmtD(l.data_entrada)}</strong>
-            ${l.dias_na_fase !== l.dias_producao && l.dias_producao != null ? ` &nbsp;·&nbsp; Dias total: <strong>${l.dias_producao}d</strong>` : ''}
+            ${l.dias_producao != null ? ` &nbsp;·&nbsp; Dias total: <strong>${l.dias_producao}d</strong>` : ''}
           </td>
         </tr>`
 
