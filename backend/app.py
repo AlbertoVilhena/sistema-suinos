@@ -1917,9 +1917,16 @@ def calcular_gmd_lote(lote):
         fonte_fase = 'pesagens_fase'
     elif len(pesagens_fase) == 1:
         dias_fase = (pesagens_fase[0].data - data_inicio_fase).days if data_inicio_fase else 0
-        gmd_fase = round((pesagens_fase[0].peso_medio - peso_ref_fase) / max(dias_fase, 1), 3)
         peso_atual = pesagens_fase[0].peso_medio
         fonte_fase = 'pesagem_unica_fase'
+        # GMD da fase só é válido se existe uma pesagem anterior como referência real.
+        # Usar peso_medio_entrada (peso de entrada do lote, geralmente meses atrás) como
+        # referência para a fase atual distorce o cálculo — ex: lote com 40kg em abril
+        # entra em terminação em junho com 76kg → gmd = (76-40)/2 = 18 kg/d (absurdo).
+        if pesagens_anteriores and peso_ref_fase > 0 and dias_fase >= 1:
+            gmd_fase = round((pesagens_fase[0].peso_medio - peso_ref_fase) / max(dias_fase, 1), 3)
+        else:
+            gmd_fase = None  # referência insuficiente — aguardando 2ª pesagem na fase
     else:
         fonte_fase = 'sem_pesagens_fase'
 
@@ -1932,7 +1939,11 @@ def calcular_gmd_lote(lote):
             peso_atual = pesagens[-1].peso_medio
     elif len(pesagens) == 1:
         dias_total = (pesagens[0].data - lote.data_entrada).days if lote.data_entrada else 0
-        gmd_total = round((pesagens[0].peso_medio - peso_entrada) / max(dias_total, 1), 3)
+        # Só calcula se peso de entrada está definido e há pelo menos 1 dia
+        if peso_entrada > 0 and dias_total >= 1:
+            gmd_total = round((pesagens[0].peso_medio - peso_entrada) / max(dias_total, 1), 3)
+        else:
+            gmd_total = None
         if peso_atual is None:
             peso_atual = pesagens[0].peso_medio
 

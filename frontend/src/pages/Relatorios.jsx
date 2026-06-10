@@ -155,6 +155,151 @@ export default function Relatorios() {
     window.print()
   }
 
+  const gerarPDFGMD = () => {
+    if (!relGmd) return
+    const win = window.open('', '_blank')
+    if (!win) { alert('Pop-up bloqueado. Permita pop-ups para este site.'); return }
+
+    const hoje = new Date().toLocaleDateString('pt-BR')
+    const fmtD = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
+    const fmtG = (v) => v != null ? `${Number(v).toFixed(3)} kg/d` : '—'
+
+    const statusCor = { ok: '#198754', alerta: '#856404', critico: '#dc3545', sem_dados: '#6c757d' }
+    const statusLabel = { ok: '✅ Normal', alerta: '⚠️ Abaixo', critico: '🔴 Crítico', sem_dados: '— Sem dados' }
+    const faseCor = { maternidade: '#9c27b0', creche: '#1976d2', crescimento: '#009688', terminacao: '#f57c00' }
+
+    const linhasLotes = relGmd.lotes.map((l, i) => {
+      const cor = statusCor[l.status_gmd] || '#6c757d'
+      const fc = faseCor[l.fase?.toLowerCase()] || '#6c757d'
+      const rowBg = l.status_gmd === 'critico' ? '#fff5f5' : l.status_gmd === 'alerta' ? '#fffbf0' : (i % 2 === 0 ? '#fff' : '#fafafa')
+      const pct = l.pct_ideal != null ? `${l.pct_ideal}%` : '—'
+      const diasStr = l.dias_na_fase !== l.dias_producao
+        ? `${l.dias_na_fase}d <span style="color:#999;font-size:10px">(${l.dias_producao}d total)</span>`
+        : `${l.dias_na_fase}d`
+      const faseStr = l.fase_desde_entrada === false && l.data_inicio_fase
+        ? `<span style="color:${fc};font-weight:600">${l.fase}</span><br><span style="font-size:10px;color:#999">desde ${fmtD(l.data_inicio_fase)}</span>`
+        : `<span style="color:${fc};font-weight:600">${l.fase}</span>`
+      const gmdFaseStr = l.gmd_fase != null
+        ? `<strong style="color:${cor};font-size:13px">${Number(l.gmd_fase).toFixed(3)}</strong><br><span style="font-size:10px;color:#999">kg/dia</span>`
+        : `<span style="color:#999;font-size:12px">Aguard. 2ª pesagem</span>`
+      const histRows = (l.historico_pesagens || []).map(p => {
+        const ref = relGmd.referencias[l.fase?.toLowerCase()]
+        const ok = p.gmd_intervalo != null && ref ? p.gmd_intervalo >= ref.min : null
+        return `<tr style="font-size:10px;color:#555">
+          <td style="padding:3px 8px;padding-left:24px" colspan="2">${p.fase_atual ? '⚡' : '◦'} ${fmtD(p.data)}</td>
+          <td style="padding:3px 8px">${p.peso_medio} kg</td>
+          <td colspan="4" style="padding:3px 8px;color:${ok === false ? '#dc3545' : ok === true ? '#198754' : '#666'}">
+            ${p.gmd_intervalo != null ? `${p.gmd_intervalo.toFixed(3)} kg/dia (${p.dias_intervalo || '?'}d)` : '—'}
+          </td>
+        </tr>`
+      }).join('')
+      return `
+        <tr style="background:${rowBg}">
+          <td style="padding:9px 10px;border-bottom:1px solid #eee"><strong>${l.numero}</strong><br><span style="font-size:10px;color:#999">${fmtD(l.data_entrada)}</span></td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee">${faseStr}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center">${diasStr}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:right">${l.peso_ref_fase > 0 ? l.peso_ref_fase + ' kg' : '—'}<br><span style="font-size:10px;color:#999">→ ${l.peso_atual} kg</span></td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center">${gmdFaseStr}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#666;font-size:11px">${fmtG(l.gmd_total)}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#666;font-size:11px">${l.ref_min != null ? l.ref_min : '—'}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;font-weight:700;color:${cor}">${pct}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;font-size:11px;font-weight:700;color:${cor}">${statusLabel[l.status_gmd] || '—'}</td>
+        </tr>
+        ${histRows}`
+    }).join('')
+
+    const alertasHTML = relGmd.lotes.filter(l => l.status_gmd === 'critico' || l.status_gmd === 'alerta').map(l => `
+      <div style="display:flex;gap:10px;align-items:center;padding:8px 14px;margin-bottom:8px;background:${l.status_gmd === 'critico' ? '#fff5f5' : '#fffbf0'};border:1px solid ${l.status_gmd === 'critico' ? '#f5c2c7' : '#ffe69c'};border-radius:6px;font-size:12px">
+        <span style="font-size:18px">${l.status_gmd === 'critico' ? '🔴' : '⚠️'}</span>
+        <div>
+          <strong>${l.numero}</strong> — ${l.fase}
+          ${l.alerta ? `<span style="color:${l.status_gmd === 'critico' ? '#dc3545' : '#856404'}"> · ${l.alerta}</span>` : ''}
+        </div>
+      </div>`).join('')
+
+    const refsHTML = Object.entries(relGmd.referencias).map(([fase, ref]) =>
+      `<span style="font-size:11px;padding:3px 10px;border-radius:12px;background:${(faseCor[fase] || '#6c757d')}18;border:1px solid ${(faseCor[fase] || '#6c757d')}44;color:${faseCor[fase] || '#6c757d'};font-weight:600;margin-right:6px">${ref.label}: mín ${ref.min} · ideal ${ref.ideal} kg/dia</span>`
+    ).join('')
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Relatório GMD — GranjaApp</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#222;padding:24px 28px}
+    @media print{body{padding:0}button{display:none!important}@page{margin:12mm 12mm 16mm;size:A4 landscape}}
+  </style>
+</head>
+<body>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;padding-bottom:12px;border-bottom:3px solid #1b5e20">
+    <div>
+      <div style="font-size:20px;font-weight:700;color:#1b5e20;margin-bottom:3px">GMD — Ganho Médio Diário · GranjaApp</div>
+      <div style="font-size:11px;color:#666">Gerado em: <strong>${hoje}</strong></div>
+    </div>
+    <button onclick="window.print()" style="padding:8px 18px;background:#1b5e20;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">Imprimir / Salvar PDF</button>
+  </div>
+
+  <div style="display:flex;gap:12px;margin-bottom:18px">
+    ${[
+      { v: relGmd.resumo?.com_dados ?? relGmd.lotes.length, l: 'Com dados', c: '#0d6efd' },
+      { v: relGmd.resumo?.ok ?? 0, l: 'GMD Normal', c: '#198754' },
+      { v: relGmd.resumo?.alertas_atencao ?? 0, l: 'Abaixo mín.', c: '#856404' },
+      { v: relGmd.resumo?.alertas_criticos ?? 0, l: 'GMD Crítico', c: '#dc3545' },
+    ].map(s => `<div style="flex:1;border:1px solid #e0e0e0;border-radius:7px;padding:10px 14px;border-top:4px solid ${s.c}">
+      <div style="font-size:26px;font-weight:700;color:${s.c}">${s.v}</div>
+      <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${s.l}</div>
+    </div>`).join('')}
+  </div>
+
+  ${alertasHTML ? `<div style="margin-bottom:18px">${alertasHTML}</div>` : ''}
+
+  <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:4px">${refsHTML}</div>
+
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="background:#1b5e20;color:#fff">
+        <th style="padding:8px 10px;text-align:left;font-size:11px;width:10%">Lote</th>
+        <th style="padding:8px 10px;text-align:left;font-size:11px;width:12%">Fase</th>
+        <th style="padding:8px 10px;text-align:center;font-size:11px;width:9%">Dias fase</th>
+        <th style="padding:8px 10px;text-align:right;font-size:11px;width:13%">Peso ref → atual</th>
+        <th style="padding:8px 10px;text-align:center;font-size:11px;width:13%">GMD fase ⚡</th>
+        <th style="padding:8px 10px;text-align:center;font-size:11px;width:10%">GMD total</th>
+        <th style="padding:8px 10px;text-align:center;font-size:11px;width:8%">Mín.</th>
+        <th style="padding:8px 10px;text-align:center;font-size:11px;width:8%">% ideal</th>
+        <th style="padding:8px 10px;text-align:center;font-size:11px;width:12%">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${relGmd.lotes.length === 0
+        ? '<tr><td colspan="9" style="padding:30px;text-align:center;color:#888">Nenhum lote com dados de pesagem</td></tr>'
+        : linhasLotes}
+    </tbody>
+  </table>
+
+  ${relGmd.sem_dados?.length > 0 ? `
+    <div style="margin-top:20px">
+      <div style="font-size:12px;font-weight:700;color:#6c757d;margin-bottom:8px">⚫ Lotes sem dados de GMD</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${relGmd.sem_dados.map(l => `<span style="padding:4px 12px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:12px;font-size:12px"><strong>${l.numero}</strong> · ${l.fase} · ${l.motivo}</span>`).join('')}
+      </div>
+    </div>` : ''}
+
+  <div style="margin-top:36px;display:flex;gap:24px">
+    <div style="flex:1"><div style="border-top:1px solid #555;margin-bottom:6px"></div><div style="font-size:11px;color:#555">Responsável técnico / Veterinário</div></div>
+    <div style="flex:1"><div style="border-top:1px solid #555;margin-bottom:6px"></div><div style="font-size:11px;color:#555">Gerente / Responsável</div></div>
+    <div style="flex:1"><div style="border-top:1px solid #555;margin-bottom:6px"></div><div style="font-size:11px;color:#555">Data de conferência</div></div>
+  </div>
+</body>
+</html>`
+
+    win.document.open()
+    win.document.write(html)
+    win.document.close()
+    setTimeout(() => win.print(), 400)
+  }
+
   return (
     <Layout title="Relatórios">
       <div className="page-header no-print">
@@ -333,6 +478,11 @@ export default function Relatorios() {
       {/* ===== ABA GMD ===== */}
       {tab === 'gmd' && (
         <div>
+          {relGmd && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }} className="no-print">
+              <button className="btn btn-outline" onClick={gerarPDFGMD}>📄 Gerar PDF</button>
+            </div>
+          )}
           {!relGmd ? (
             <div className="loading"><div className="spinner" />Carregando GMD...</div>
           ) : (
