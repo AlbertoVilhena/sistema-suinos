@@ -11,6 +11,18 @@ const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFr
 
 const today = new Date().toISOString().split('T')[0]
 
+const KG_LABEL = {
+  maternidade: '2,5 kg/animal', creche: '0,8 kg/animal',
+  crescimento: '1,8 kg/animal', terminacao: '2,8 kg/animal',
+  matrizes: '2,5 kg/animal', reprodutores: '3,0 kg/animal',
+}
+
+const FASE_COR = {
+  maternidade: '#9c27b0', creche: '#1976d2',
+  crescimento: '#009688', terminacao: '#f57c00',
+  matrizes: '#e91e63', reprodutores: '#3f51b5',
+}
+
 const plantelGrupoLabel = {
   matrizes: '🐷 Matrizes',
   reprodutores: '🐗 Reprodutores',
@@ -36,6 +48,76 @@ export default function Alimentacao() {
   const { canEdit, canWrite } = useAuth()
   const toast = useToast()
   const confirm = useConfirm()
+
+  // Tab principal
+  const [tab, setTab] = useState('diaria')
+
+  // ===== ABA DIÁRIA =====
+  const [diariaDate, setDiariaDate] = useState(today)
+  const [diariaData, setDiariaData] = useState(null)
+  const [diariaLoading, setDiariaLoading] = useState(false)
+  const [diariaInputs, setDiariaInputs] = useState({})   // key→{kg, formulacao_id}
+  const [diariaSaving, setDiariaSaving] = useState(false)
+
+  const loadDiaria = (dt) => {
+    setDiariaLoading(true)
+    api.get(`/api/alimentacao/diaria?data=${dt}`)
+      .then(r => {
+        setDiariaData(r.data)
+        const inputs = {}
+        r.data.destinos.forEach(d => {
+          const key = d.tipo === 'lote' ? `lote-${d.id}` : `plantel-${d.id}`
+          inputs[key] = {
+            kg: d.alimentado_hoje ? String(d.total_kg_hoje) : String(d.kg_sugerido),
+            formulacao_id: String(d.formulacao_sugerida_id || ''),
+          }
+        })
+        setDiariaInputs(inputs)
+      })
+      .catch(console.error)
+      .finally(() => setDiariaLoading(false))
+  }
+
+  useEffect(() => { if (tab === 'diaria') loadDiaria(diariaDate) }, [tab, diariaDate])
+
+  const setDiariaInput = (key, field, value) =>
+    setDiariaInputs(prev => ({ ...prev, [key]: { ...(prev[key] || {}), [field]: value } }))
+
+  const handleSalvarDiaria = async () => {
+    if (!diariaData) return
+    setDiariaSaving(true)
+    const registros = []
+    diariaData.destinos.forEach(d => {
+      if (d.alimentado_hoje) return
+      const key = d.tipo === 'lote' ? `lote-${d.id}` : `plantel-${d.id}`
+      const inp = diariaInputs[key] || {}
+      const kg = parseFloat(inp.kg)
+      if (!kg || kg <= 0) return
+      const fid = inp.formulacao_id ? parseInt(inp.formulacao_id) : null
+      const fobj = diariaData.formulacoes.find(f => f.id === fid)
+      const reg = { data: diariaDate, quantidade_kg: kg, formulacao_id: fid || null, racao_tipo: fobj?.nome || null }
+      if (d.tipo === 'lote') reg.lote_id = d.id
+      else reg.plantel_grupo = d.id
+      registros.push(reg)
+    })
+    if (!registros.length) { toast.warning('Todos os lotes já foram alimentados hoje.'); setDiariaSaving(false); return }
+    try {
+      await api.post('/api/alimentacao/bulk', { registros })
+      toast.success(`✅ ${registros.length} registro(s) de alimentação salvos!`)
+      loadDiaria(diariaDate)
+      reloadAlims()
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Erro ao salvar')
+    } finally { setDiariaSaving(false) }
+  }
+
+  const navDia = (delta) => {
+    const d = new Date(diariaDate + 'T00:00:00')
+    d.setDate(d.getDate() + delta)
+    setDiariaDate(d.toISOString().split('T')[0])
+  }
+
+  // ===== ABA HISTÓRICO =====
   const [alims, setAlims] = useState([])
   const [totalAlims, setTotalAlims] = useState(0)
   const [lotes, setLotes] = useState([])
@@ -196,13 +278,161 @@ export default function Alimentacao() {
       <div className="page-header">
         <div><h1>🌽 Alimentação</h1><p>Controle de ração e nutrição</p></div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn btn-outline" onClick={toggleConsumo}>
-            {showConsumo ? '📋 Ocultar Consumo' : '📊 Consumo por Animal'}
-          </button>
-          {canWrite() && <button className="btn btn-primary" onClick={openCreate}>+ Registrar Alimentação</button>}
+          {tab === 'historico' && (
+            <>
+              <button className="btn btn-outline" onClick={toggleConsumo}>
+                {showConsumo ? '📋 Ocultar Consumo' : '📊 Consumo/Animal'}
+              </button>
+              {canWrite() && <button className="btn btn-primary" onClick={openCreate}>+ Registrar</button>}
+            </>
+          )}
         </div>
       </div>
 
+      <div className="tabs">
+        <div className={`tab ${tab === 'diaria' ? 'active' : ''}`} onClick={() => setTab('diaria')}>📅 Diária</div>
+        <div className={`tab ${tab === 'historico' ? 'active' : ''}`} onClick={() => setTab('historico')}>📋 Histórico</div>
+      </div>
+
+      {/* ===== ABA DIÁRIA ===== */}
+      {tab === 'diaria' && (
+        <div>
+          {/* Navegação de data */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+            <button className="btn btn-outline btn-sm" onClick={() => navDia(-1)}>‹ Anterior</button>
+            <input type="date" value={diariaDate} onChange={e => setDiariaDate(e.target.value)}
+              style={{ padding: '6px 10px', border: '1px solid #ced4da', borderRadius: 6, fontSize: 13 }} />
+            <button className="btn btn-outline btn-sm" onClick={() => navDia(1)}>Próximo ›</button>
+            {diariaDate !== today && (
+              <button className="btn btn-outline btn-sm" onClick={() => setDiariaDate(today)}>Hoje</button>
+            )}
+            {diariaData && (
+              <div style={{ display: 'flex', gap: 8, marginLeft: 4, flexWrap: 'wrap' }}>
+                <span style={{ background: '#d8f3dc', color: '#1b5e20', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>
+                  ✅ {diariaData.alimentados} alimentados
+                </span>
+                {diariaData.pendentes > 0 && (
+                  <span style={{ background: '#fff3cd', color: '#664d03', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>
+                    ⏳ {diariaData.pendentes} pendentes
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {diariaLoading && <div className="loading"><div className="spinner" />Carregando...</div>}
+
+          {diariaData && !diariaLoading && (
+            <>
+              {diariaData.destinos.length === 0 ? (
+                <div className="card"><div className="table-empty"><span className="empty-icon">🐖</span>Nenhum lote ativo cadastrado.</div></div>
+              ) : (
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  <table style={{ fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '20%' }}>Destino</th>
+                        <th style={{ width: '10%' }}>Fase</th>
+                        <th style={{ width: '8%', textAlign: 'center' }}>Animais</th>
+                        <th style={{ width: '10%', textAlign: 'right' }}>Sugerido</th>
+                        <th style={{ width: '14%' }}>Kg fornecido</th>
+                        <th style={{ width: '26%' }}>Formulação</th>
+                        <th style={{ width: '12%', textAlign: 'center' }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {diariaData.destinos.map(d => {
+                        const key = d.tipo === 'lote' ? `lote-${d.id}` : `plantel-${d.id}`
+                        const inp = diariaInputs[key] || {}
+                        const cor = FASE_COR[d.fase?.toLowerCase()] || '#6c757d'
+                        const rowBg = d.alimentado_hoje ? '#f0fff4' : 'inherit'
+                        return (
+                          <tr key={key} style={{ background: rowBg }}>
+                            <td data-label="Destino">
+                              <strong style={{ fontSize: 13 }}>{d.nome}</strong>
+                            </td>
+                            <td data-label="Fase">
+                              {d.fase && (
+                                <span style={{ background: cor + '22', color: cor, border: `1px solid ${cor}55`, borderRadius: 10, padding: '2px 8px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                  {d.fase}
+                                </span>
+                              )}
+                            </td>
+                            <td data-label="Animais" style={{ textAlign: 'center', fontWeight: 600 }}>
+                              {d.quantidade_animais}
+                            </td>
+                            <td data-label="Sugerido" style={{ textAlign: 'right', color: '#6c757d', fontSize: 12 }}>
+                              {d.kg_sugerido} kg
+                              <div style={{ fontSize: 10, color: '#adb5bd' }}>{KG_LABEL[d.fase?.toLowerCase()] || ''}</div>
+                            </td>
+                            <td data-label="Kg fornecido">
+                              {d.alimentado_hoje ? (
+                                <span style={{ fontWeight: 700, color: '#198754' }}>{d.total_kg_hoje} kg</span>
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <input
+                                    type="number" step="0.1" min="0"
+                                    value={inp.kg || ''}
+                                    onChange={e => setDiariaInput(key, 'kg', e.target.value)}
+                                    style={{ width: 70, padding: '4px 6px', border: '1px solid #ced4da', borderRadius: 5, fontSize: 13, textAlign: 'right' }}
+                                  />
+                                  <span style={{ fontSize: 11, color: '#6c757d' }}>kg</span>
+                                </div>
+                              )}
+                            </td>
+                            <td data-label="Formulação">
+                              {d.alimentado_hoje ? (
+                                <span style={{ fontSize: 12, color: '#6c757d' }}>
+                                  {diariaData.formulacoes.find(f => String(f.id) === String(d.formulacao_sugerida_id))?.nome || '—'}
+                                </span>
+                              ) : (
+                                <select
+                                  value={inp.formulacao_id || ''}
+                                  onChange={e => setDiariaInput(key, 'formulacao_id', e.target.value)}
+                                  style={{ width: '100%', padding: '4px 6px', border: '1px solid #ced4da', borderRadius: 5, fontSize: 12 }}
+                                >
+                                  <option value="">— Sem formulação —</option>
+                                  {diariaData.formulacoes.map(f => (
+                                    <option key={f.id} value={f.id}>{f.nome}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </td>
+                            <td data-label="Status" style={{ textAlign: 'center' }}>
+                              {d.alimentado_hoje
+                                ? <span style={{ background: '#d8f3dc', color: '#1b5e20', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>✅ OK</span>
+                                : <span style={{ background: '#fff3cd', color: '#664d03', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600 }}>⏳ Pendente</span>
+                              }
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {canWrite() && diariaData.pendentes > 0 && (
+                <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+                  <button className="btn btn-primary" onClick={handleSalvarDiaria} disabled={diariaSaving} style={{ minWidth: 180 }}>
+                    {diariaSaving ? '⏳ Salvando...' : `✅ Registrar Alimentação (${diariaData.pendentes} lote${diariaData.pendentes > 1 ? 's' : ''})`}
+                  </button>
+                </div>
+              )}
+
+              {diariaData.pendentes === 0 && diariaData.total > 0 && (
+                <div style={{ marginTop: 12, padding: '10px 14px', background: '#d8f3dc', border: '1px solid #a3d9b1', borderRadius: 8, color: '#1b5e20', fontWeight: 600, fontSize: 13 }}>
+                  ✅ Todos os lotes foram alimentados neste dia!
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ===== ABA HISTÓRICO ===== */}
+      {tab === 'historico' && (
+      <>
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
         <div className="stat-card" style={{ flex: 1, minWidth: 180 }}>
           <div className="stat-icon green">🌽</div>
@@ -351,6 +581,8 @@ export default function Alimentacao() {
           </table>
         )}
       </div>
+      </>
+      )}
 
       {/* ===== MODAL ===== */}
       {showModal && (

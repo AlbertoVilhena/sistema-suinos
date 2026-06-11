@@ -43,7 +43,7 @@ export default function Formulacao() {
   // Produção
   const [showProducaoModal, setShowProducaoModal] = useState(false)
   const [producaoTarget, setProducaoTarget] = useState(null)
-  const [producaoForm, setProducaoForm] = useState({ destino_tipo: 'lote', lote_id: '', plantel_grupo: '', quantidade_kg: '', data: today, deduzir_estoque: true, observacoes: '' })
+  const [producaoForm, setProducaoForm] = useState({ quantidade_kg: '', data: today, deduzir_estoque: true, observacoes: '' })
   const [savingProducao, setSavingProducao] = useState(false)
   const [producaoError, setProducaoError] = useState('')
 
@@ -172,7 +172,7 @@ export default function Formulacao() {
 
   const openProducao = (f) => {
     setProducaoTarget(f)
-    setProducaoForm({ destino_tipo: 'lote', lote_id: '', plantel_grupo: '', quantidade_kg: '', data: today, deduzir_estoque: true, observacoes: '' })
+    setProducaoForm({ quantidade_kg: '', data: today, deduzir_estoque: true, observacoes: '' })
     setProducaoError('')
     setShowProducaoModal(true)
   }
@@ -182,12 +182,10 @@ export default function Formulacao() {
     setSavingProducao(true)
     try {
       const payload = { ...producaoForm }
-      if (payload.destino_tipo === 'plantel') { payload.lote_id = '' } else { payload.plantel_grupo = '' }
-      delete payload.destino_tipo
       await api.post(`/api/formulacoes/${producaoTarget.id}/produzir`, payload)
       setShowProducaoModal(false)
       load()
-      toast.success(`Produção registrada! ${producaoForm.quantidade_kg} kg de "${producaoTarget.nome}" lançado em Alimentação`)
+      toast.success(`✅ ${producaoForm.quantidade_kg} kg de "${producaoTarget.nome}" adicionados ao estoque de ração pronta`)
     } catch (e) {
       setProducaoError(e.response?.data?.error || 'Erro ao registrar produção')
     } finally { setSavingProducao(false) }
@@ -494,39 +492,6 @@ export default function Formulacao() {
             </div>
 
             <div className="form-grid">
-              {/* Destino */}
-              <div className="form-group span-2">
-                <label>Destino *</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button"
-                    className={`btn btn-sm ${producaoForm.destino_tipo === 'lote' ? 'btn-primary' : 'btn-outline'}`}
-                    onClick={() => setPF('destino_tipo', 'lote')}>🐖 Lote Comercial</button>
-                  <button type="button"
-                    className={`btn btn-sm ${producaoForm.destino_tipo === 'plantel' ? 'btn-primary' : 'btn-outline'}`}
-                    onClick={() => setPF('destino_tipo', 'plantel')}>🐷 Plantel Reprodutivo</button>
-                </div>
-              </div>
-
-              {producaoForm.destino_tipo === 'lote' ? (
-                <div className="form-group">
-                  <label>Lote *</label>
-                  <select value={producaoForm.lote_id} onChange={e => setPF('lote_id', e.target.value)}>
-                    <option value="">Selecione o lote</option>
-                    {lotes.map(l => <option key={l.id} value={l.id}>{l.numero}</option>)}
-                  </select>
-                </div>
-              ) : (
-                <div className="form-group">
-                  <label>Grupo do Plantel *</label>
-                  <select value={producaoForm.plantel_grupo} onChange={e => setPF('plantel_grupo', e.target.value)}>
-                    <option value="">Selecione o grupo</option>
-                    <option value="matrizes">🐷 Matrizes</option>
-                    <option value="reprodutores">🐗 Reprodutores</option>
-                    <option value="geral">🐖 Plantel Geral</option>
-                  </select>
-                </div>
-              )}
-
               <div className="form-group">
                 <label>Data *</label>
                 <input type="date" value={producaoForm.data} onChange={e => setPF('data', e.target.value)} />
