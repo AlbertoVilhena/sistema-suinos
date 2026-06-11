@@ -152,14 +152,13 @@ export default function Relatorios() {
   const maxRec = Math.max(...rec.map(r => r.total), 1)
 
   const handlePrint = () => {
+    if (tab === 'gmd') { gerarPDFGMD(); return }
     document.title = `Relatório GranjaApp - ${tab === 'lotes' ? 'Lotes' : tab === 'financeiro' ? 'Financeiro' : 'Análise IA'}`
     window.print()
   }
 
   const gerarPDFGMD = () => {
     if (!relGmd) return
-    const win = window.open('', '_blank')
-    if (!win) { alert('Pop-up bloqueado. Permita pop-ups para este site.'); return }
 
     const hoje = new Date().toLocaleDateString('pt-BR')
     const fmtD = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—'
@@ -275,7 +274,7 @@ export default function Relatorios() {
       <div style="font-size:18px;font-weight:700;color:#1b5e20;letter-spacing:-.3px">GMD — Ganho Médio Diário · GranjaApp</div>
       <div style="font-size:11px;color:#6c757d;margin-top:2px">Gerado em: <strong>${hoje}</strong> &nbsp;·&nbsp; ${totalLotes} lote${totalLotes !== 1 ? 's' : ''} analisado${totalLotes !== 1 ? 's' : ''}</div>
     </div>
-    <button onclick="window.print()" style="padding:7px 16px;background:#1b5e20;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600">🖨 Imprimir / Salvar PDF</button>
+    <div style="font-size:11px;color:#6c757d">GMD — Ganho Médio Diário</div>
   </div>
 
   <!-- Cards resumo -->
@@ -346,10 +345,35 @@ export default function Relatorios() {
 </body>
 </html>`
 
-    win.document.open()
-    win.document.write(html)
-    win.document.close()
-    setTimeout(() => win.print(), 400)
+    // Injeta conteúdo na página atual e imprime sem abrir nova aba
+    const existing = document.getElementById('__gmd_print_overlay')
+    if (existing) existing.remove()
+
+    const overlay = document.createElement('div')
+    overlay.id = '__gmd_print_overlay'
+    overlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:#fff;overflow:auto'
+    overlay.innerHTML = html
+
+    // Estilos de impressão: esconde tudo menos o overlay
+    const styleTag = document.createElement('style')
+    styleTag.id = '__gmd_print_style'
+    styleTag.textContent = `
+      @media print {
+        body > *:not(#__gmd_print_overlay) { display: none !important; }
+        #__gmd_print_overlay { display: block !important; position: static !important; }
+        @page { margin: 10mm 12mm 14mm; size: A4 landscape; }
+      }
+    `
+    document.head.appendChild(styleTag)
+    document.body.appendChild(overlay)
+
+    setTimeout(() => {
+      window.print()
+      setTimeout(() => {
+        overlay.remove()
+        styleTag.remove()
+      }, 500)
+    }, 200)
   }
 
   return (
@@ -530,11 +554,7 @@ export default function Relatorios() {
       {/* ===== ABA GMD ===== */}
       {tab === 'gmd' && (
         <div>
-          {relGmd && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }} className="no-print">
-              <button className="btn btn-outline" onClick={gerarPDFGMD}>📄 Gerar PDF</button>
-            </div>
-          )}
+          {relGmd && <div style={{ marginBottom: 12 }} />}
           {!relGmd ? (
             <div className="loading"><div className="spinner" />Carregando GMD...</div>
           ) : (
