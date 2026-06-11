@@ -155,7 +155,7 @@ export default function Sanidade() {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Agenda de Vacinação — GranjaApp</title>
+  <title>Agenda de Vacinação — GranjaApp ${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family: Arial, Helvetica, sans-serif; font-size:12px; color:#222; padding:28px 32px; }
@@ -378,7 +378,7 @@ export default function Sanidade() {
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Relatório de Sanidade — GranjaApp</title>
+  <title>Relatório de Sanidade — GranjaApp ${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family: Arial, Helvetica, sans-serif; font-size:12px; color:#222; padding:28px 32px; }

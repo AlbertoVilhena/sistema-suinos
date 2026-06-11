@@ -159,8 +159,12 @@ export default function Relatorios() {
 
   const handlePrint = () => {
     if (tab === 'gmd') { gerarPDFGMD(); return }
-    document.title = `Relatório GranjaApp - ${tab === 'lotes' ? 'Lotes' : tab === 'financeiro' ? 'Financeiro' : 'Análise IA'}`
+    const tituloOriginal = document.title
+    const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')
+    const nomeAba = tab === 'lotes' ? 'Lotes' : tab === 'financeiro' ? 'Financeiro' : 'Análise IA'
+    document.title = `Relatório GranjaApp - ${nomeAba} ${dataHoje}`
     window.print()
+    setTimeout(() => { document.title = tituloOriginal }, 500)
   }
 
   const gerarPDFGMD = () => {
