@@ -113,6 +113,7 @@ export default function Relatorios() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('lotes')
   const [expandedGmd, setExpandedGmd] = useState({})
+  const [precoMercado, setPrecoMercado] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -156,6 +157,7 @@ export default function Relatorios() {
   const rec = relFin?.receitas_por_categoria || []
   const maxDesp = Math.max(...desp.map(d => d.total), 1)
   const maxRec = Math.max(...rec.map(r => r.total), 1)
+  const precoNum = parseFloat((precoMercado || '').replace(',', '.')) || 0
 
   const handlePrint = () => {
     if (tab === 'gmd') { gerarPDFGMD(); return }
@@ -758,15 +760,35 @@ export default function Relatorios() {
       {/* ===== ABA ANÁLISE IA ===== */}
       {tab === 'ia' && (
         <div>
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
               <div>
-                <div className="card-title">🤖 Análise IA — Momento Ideal de Venda</div>
-                <p style={{ color: '#6c757d', fontSize: 13, marginTop: 4 }}>Análise por ganho de peso, custo e métricas de produção.</p>
+                <div className="card-title" style={{ fontSize: 14 }}>🤖 Análise IA — Momento Ideal de Venda</div>
+                <p style={{ color: '#6c757d', fontSize: 12, marginTop: 3 }}>Análise por ganho de peso, custo e métricas de produção.</p>
               </div>
-              <button className="btn btn-outline no-print" onClick={carregarAnalise} disabled={analiseLoading} style={{ width: '100%' }}>
-                {analiseLoading ? '⏳ Analisando...' : '🔄 Atualizar Análise'}
+              <button className="btn btn-outline no-print" onClick={carregarAnalise} disabled={analiseLoading}>
+                {analiseLoading ? '⏳ Analisando...' : '🔄 Atualizar'}
               </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, paddingTop: 10, borderTop: '1px solid #e9ecef', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#495057' }}>💰 Preço de mercado:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#6c757d' }}>R$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0,00"
+                  value={precoMercado}
+                  onChange={e => setPrecoMercado(e.target.value)}
+                  style={{ width: 80, padding: '4px 8px', border: '1px solid #ced4da', borderRadius: 6, fontSize: 13, textAlign: 'right' }}
+                />
+                <span style={{ fontSize: 12, color: '#6c757d' }}>/kg</span>
+              </div>
+              {precoNum > 0
+                ? <span style={{ fontSize: 11, color: '#198754', fontWeight: 600 }}>✅ Analisando ao preço de {fmtMoeda(precoNum)}/kg</span>
+                : <span style={{ fontSize: 11, color: '#6c757d', fontStyle: 'italic' }}>Informe o preço praticado para ver rentabilidade real</span>
+              }
             </div>
           </div>
 
@@ -779,58 +801,84 @@ export default function Relatorios() {
           {analise?.lotes?.map(l => (
             <div key={l.lote_id} className="card" style={{ marginBottom: 12, borderLeft: `4px solid ${l.cor_recomendacao}` }}>
               {/* Cabeçalho do lote */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                <strong style={{ fontSize: 16 }}>Lote {l.numero}</strong>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 5 }}>
+                <strong style={{ fontSize: 15 }}>Lote {l.numero}</strong>
                 <span className="badge" style={{ background: l.cor_recomendacao, color: '#fff', fontWeight: 700 }}>{l.icone_recomendacao} {l.recomendacao}</span>
                 <span className={`badge ${l.fase === 'terminacao' ? 'badge-yellow' : 'badge-blue'}`}>{l.fase || '-'}</span>
               </div>
-              <p style={{ color: '#495057', fontSize: 13, marginBottom: 12 }}>{l.justificativa}</p>
+              <p style={{ color: '#495057', fontSize: 12, marginBottom: 10 }}>{l.justificativa}</p>
 
               {/* Métricas em grid 2x2 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
                 {[
                   { label: 'Animais', value: l.qtd_animais },
                   { label: 'Peso médio', value: `${fmtNum(l.peso_medio_atual)} kg` },
-                  { label: 'Ganho/dia', value: `${fmtNum(l.ganho_diario_medio, 3)} kg` },
+                  { label: 'Ganho/dia', value: `${fmtNum(l.ganho_diario_medio, 3)} kg/d` },
                   { label: 'Dias prod.', value: l.dias_em_producao },
                   { label: 'Peso total est.', value: `${fmtNum(l.peso_total_kg, 1)} kg` },
                   { label: 'Custo/kg', value: `${fmtMoeda(l.custo_por_kg)}/kg` },
                   { label: 'Custo total', value: fmtMoeda(l.custo_total) },
                   { label: 'Dias p/ alvo', value: l.dias_para_peso_alvo > 0 ? `~${l.dias_para_peso_alvo}d` : l.dias_para_peso_alvo === 0 ? '✅ atingido' : '—' },
                 ].map((m, i) => (
-                  <div key={i} style={{ background: '#f8f9fa', borderRadius: 6, padding: '8px 10px' }}>
-                    <div style={{ fontSize: 10, color: '#6c757d', textTransform: 'uppercase', fontWeight: 600 }}>{m.label}</div>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: '#212529', marginTop: 2 }}>{m.value}</div>
+                  <div key={i} style={{ background: '#f8f9fa', borderRadius: 6, padding: '7px 9px' }}>
+                    <div style={{ fontSize: 9, color: '#6c757d', textTransform: 'uppercase', fontWeight: 600 }}>{m.label}</div>
+                    <div style={{ fontWeight: 600, fontSize: 12, color: '#212529', marginTop: 2 }}>{m.value}</div>
                   </div>
                 ))}
               </div>
 
-              {/* Seção: Valor Mínimo de Venda */}
-              <div style={{ background: '#f0f7ff', border: '1px solid #b6d4fe', borderRadius: 8, padding: '12px 14px', marginBottom: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#0d6efd', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 }}>
-                  💰 Valor Mínimo de Venda — baseado no peso atual do lote
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
-                  {[
-                    { label: 'Equilíbrio (0%)', sublabel: 'Só cobre os custos', price: l.preco_breakeven, receita: l.receita_breakeven, lucro: 0, color: '#6c757d', bg: '#f8f9fa' },
-                    { label: 'Mínimo (15%)', sublabel: 'Margem mínima recomendada', price: l.preco_minimo_lucro, receita: l.receita_minima, lucro: l.lucro_minimo, color: '#fd7e14', bg: '#fff8f0' },
-                    { label: 'Recomendado (25%)', sublabel: 'Meta de rentabilidade', price: l.preco_recomendado, receita: l.receita_recomendada, lucro: l.lucro_recomendado, color: '#198754', bg: '#f0fff4' },
-                  ].map((p, i) => (
-                    <div key={i} style={{ background: p.bg, border: `1px solid ${p.color}33`, borderRadius: 8, padding: '10px 10px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: p.color, textTransform: 'uppercase', marginBottom: 4 }}>{p.label}</div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: p.color }}>{fmtMoeda(p.price)}<span style={{ fontSize: 11, fontWeight: 400 }}>/kg</span></div>
-                      <div style={{ fontSize: 11, color: '#495057', marginTop: 6, borderTop: `1px solid ${p.color}22`, paddingTop: 6 }}>
-                        <div>Receita: <strong>{fmtMoeda(p.receita)}</strong></div>
-                        {i > 0 && <div style={{ color: '#198754', fontWeight: 600 }}>Lucro: +{fmtMoeda(p.lucro)}</div>}
-                      </div>
-                      <div style={{ fontSize: 10, color: '#6c757d', marginTop: 4 }}>{p.sublabel}</div>
+              {/* Seção: Análise de Preço de Venda */}
+              {(() => {
+                const recMercado = precoNum * l.peso_total_kg
+                const lucMercado = recMercado - l.custo_total
+                const margPct = l.preco_breakeven > 0 ? ((precoNum / l.preco_breakeven - 1) * 100).toFixed(1) : null
+                const positivo = lucMercado >= 0
+                return (
+                  <div style={{ background: '#f8faff', border: '1px solid #d0e4ff', borderRadius: 8, padding: '11px 13px', marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#0d6efd', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 9 }}>
+                      💰 Análise de Preço de Venda
                     </div>
-                  ))}
-                </div>
-                <div style={{ fontSize: 11, color: '#6c757d', fontStyle: 'italic' }}>
-                  * Cálculo baseado em {fmtNum(l.peso_total_kg, 1)} kg estimados ({l.qtd_animais} animais × {fmtNum(l.peso_medio_atual)} kg/animal). Custos considerados: ração, sanidade e aquisição.
-                </div>
-              </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: precoNum > 0 ? '1fr 1fr 1fr' : '1fr 1fr', gap: 7, marginBottom: 8 }}>
+                      {/* Equilíbrio */}
+                      <div style={{ background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: 7, padding: '8px 9px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: '#6c757d', textTransform: 'uppercase', marginBottom: 3 }}>EQUILÍBRIO</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: '#495057' }}>{fmtMoeda(l.preco_breakeven)}<span style={{ fontSize: 9, fontWeight: 400 }}>/kg</span></div>
+                        <div style={{ fontSize: 10, color: '#6c757d', marginTop: 4, borderTop: '1px solid #dee2e6', paddingTop: 4 }}>
+                          <div>Cobre custos (0% lucro)</div>
+                          <div style={{ marginTop: 1 }}>Receita: <strong>{fmtMoeda(l.receita_breakeven)}</strong></div>
+                        </div>
+                      </div>
+                      {/* Mínimo +15% */}
+                      <div style={{ background: '#fff8f0', border: '1px solid #fd7e1430', borderRadius: 7, padding: '8px 9px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: '#fd7e14', textTransform: 'uppercase', marginBottom: 3 }}>CUSTO +15%</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: '#fd7e14' }}>{fmtMoeda(l.preco_minimo_lucro)}<span style={{ fontSize: 9, fontWeight: 400 }}>/kg</span></div>
+                        <div style={{ fontSize: 10, color: '#495057', marginTop: 4, borderTop: '1px solid #fd7e1420', paddingTop: 4 }}>
+                          <div>Receita: <strong>{fmtMoeda(l.receita_minima)}</strong></div>
+                          <div style={{ color: '#fd7e14', fontWeight: 600, marginTop: 1 }}>Lucro: +{fmtMoeda(l.lucro_minimo)}</div>
+                        </div>
+                      </div>
+                      {/* Preço de mercado */}
+                      {precoNum > 0 && (
+                        <div style={{ background: positivo ? '#f0fff4' : '#fff5f5', border: `2px solid ${positivo ? '#198754' : '#dc3545'}`, borderRadius: 7, padding: '8px 9px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: positivo ? '#198754' : '#dc3545', textTransform: 'uppercase', marginBottom: 3 }}>PREÇO MERCADO</div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: positivo ? '#198754' : '#dc3545' }}>{fmtMoeda(precoNum)}<span style={{ fontSize: 9, fontWeight: 400 }}>/kg</span></div>
+                          <div style={{ fontSize: 10, color: '#495057', marginTop: 4, borderTop: `1px solid ${positivo ? '#a3d9b122' : '#f5c2c722'}`, paddingTop: 4 }}>
+                            <div>Receita: <strong>{fmtMoeda(recMercado)}</strong></div>
+                            <div style={{ color: positivo ? '#198754' : '#dc3545', fontWeight: 700, marginTop: 1 }}>
+                              {positivo ? 'Lucro' : 'Prejuízo'}: {positivo ? '+' : ''}{fmtMoeda(lucMercado)}
+                            </div>
+                            {margPct !== null && <div style={{ color: '#6c757d', marginTop: 1 }}>Margem: {margPct}%</div>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#6c757d', fontStyle: 'italic' }}>
+                      * {fmtNum(l.peso_total_kg, 1)} kg estimados ({l.qtd_animais} × {fmtNum(l.peso_medio_atual)} kg)
+                      {precoNum <= 0 && <span style={{ color: '#0d6efd' }}> · Informe o preço de mercado acima para análise completa</span>}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {l.alertas?.length > 0 && (
                 <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '8px 12px', fontSize: 13 }}>
