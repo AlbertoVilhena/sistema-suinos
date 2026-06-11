@@ -1553,7 +1553,7 @@ def get_alimentacao_diaria():
 
     return jsonify({
         'data': data_ref.isoformat(),
-        'formulacoes': [{'id': f.id, 'nome': f.nome, 'fase': f.fase, 'custo_por_kg': f.custo_por_kg} for f in formulacoes],
+        'formulacoes': [{'id': f.id, 'nome': f.nome, 'fase': f.fase, 'custo_por_kg': f.calcular_custo_por_kg()} for f in formulacoes],
         'destinos': destinos,
         'total': len(destinos),
         'alimentados': sum(1 for d in destinos if d['alimentado_hoje']),
