@@ -2041,6 +2041,10 @@ def get_dashboard():
     total_despesas = despesas_fin + total_operacional
     saldo = receitas - total_despesas
 
+    partos_realizados = Reproducao.query.filter(
+        Reproducao.data_parto_real >= ultimo_mes,
+        Reproducao.data_parto_real <= hoje
+    ).count()
     partos_previstos = Reproducao.query.filter(
         Reproducao.data_parto_previsto >= hoje,
         Reproducao.data_parto_previsto <= em_30_dias,
@@ -2065,6 +2069,7 @@ def get_dashboard():
         'despesas_financeiro': round(despesas_fin, 2),
         'total_operacional': round(total_operacional, 2),
         'saldo': round(saldo, 2),
+        'partos_realizados_30dias': partos_realizados,
         'partos_previstos_30dias': partos_previstos,
         'custo_racao_30dias': round(custo_racao_30d, 2),
         'lotes_recentes': [l.to_dict() for l in lotes_recentes],

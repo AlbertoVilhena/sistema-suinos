@@ -44,7 +44,7 @@ export default function Dashboard() {
     { icon: '🐖', label: 'Lotes Ativos',  value: data?.total_lotes_ativos ?? 0,      cls: 'green'  },
     { icon: '🐷', label: 'Animais',        value: data?.total_animais ?? 0,            cls: 'blue'   },
     { icon: '💉', label: 'Vacinações',     value: data?.total_vacinacoes ?? 0,         cls: 'purple' },
-    { icon: '🫀', label: 'Partos/30d',     value: data?.partos_previstos_30dias ?? 0,  cls: 'orange' },
+    { icon: '🫀', label: 'Partos 30d',     value: data?.partos_realizados_30dias ?? 0,  cls: 'orange' },
     { icon: '📈', label: 'Receitas',       value: fmtK(data?.receitas),               cls: 'teal'   },
     { icon: '📉', label: 'Despesas',       value: fmtK(data?.despesas),               cls: 'red'    },
   ]
