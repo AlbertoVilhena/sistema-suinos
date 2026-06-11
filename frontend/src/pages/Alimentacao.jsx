@@ -301,7 +301,7 @@ export default function Alimentacao() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
             <button className="btn btn-outline btn-sm" onClick={() => navDia(-1)}>‹ Anterior</button>
             <input type="date" value={diariaDate} onChange={e => setDiariaDate(e.target.value)}
-              style={{ padding: '6px 10px', border: '1px solid #ced4da', borderRadius: 6, fontSize: 13 }} />
+              style={{ padding: '6px 10px', border: '1px solid #ced4da', borderRadius: 6, fontSize: 13, width: 'auto', flexShrink: 0 }} />
             <button className="btn btn-outline btn-sm" onClick={() => navDia(1)}>Próximo ›</button>
             {diariaDate !== today && (
               <button className="btn btn-outline btn-sm" onClick={() => setDiariaDate(today)}>Hoje</button>
