@@ -23,13 +23,97 @@ function BarChart({ items, maxValue, color = '' }) {
   )
 }
 
+/* Card por lote — visível apenas no mobile */
+function LoteCard({ l }) {
+  const [expanded, setExpanded] = useState(false)
+  const resultadoColor = l.resultado_lote >= 0 ? '#198754' : '#dc3545'
+  const statusCls = l.status === 'ativo' ? 'badge-green' : l.status === 'vendido' ? 'badge-blue' : 'badge-gray'
+
+  return (
+    <div className="rel-lote-card">
+      {/* Cabeçalho */}
+      <div className="rel-lote-card-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <strong style={{ fontSize: 16 }}>Lote {l.numero}</strong>
+          <span className={`badge ${statusCls}`}>{l.status}</span>
+          {l.fase && <span className="badge badge-gray">{l.fase}</span>}
+        </div>
+        <div style={{ fontSize: 12, color: '#6c757d', marginTop: 2 }}>{fmtData(l.data_entrada)} · {l.quantidade_atual} animais</div>
+      </div>
+
+      {/* Resultado em destaque */}
+      <div className="rel-lote-resultado" style={{ borderColor: resultadoColor, color: resultadoColor }}>
+        <div style={{ fontSize: 11, textTransform: 'uppercase', fontWeight: 600, opacity: 0.8 }}>Resultado</div>
+        <div style={{ fontSize: 22, fontWeight: 800 }}>
+          {l.resultado_lote >= 0 ? '+' : ''}{fmtMoeda(l.resultado_lote)}
+        </div>
+      </div>
+
+      {/* Grid de métricas principais */}
+      <div className="rel-lote-metrics">
+        {[
+          { label: 'Receita', value: fmtMoeda(l.receita_lote), color: '#198754' },
+          { label: 'Total Custos', value: fmtMoeda(l.total_operacional), color: '#dc3545' },
+          { label: 'Custo/Animal', value: fmtMoeda(l.custo_por_animal) },
+          { label: 'Mortalidade', value: `${fmtNum(l.taxa_mortalidade)}%`, color: l.taxa_mortalidade > 5 ? '#dc3545' : '#198754' },
+        ].map((m, i) => (
+          <div key={i} className="rel-metric-box">
+            <div className="rel-metric-label">{m.label}</div>
+            <div className="rel-metric-value" style={m.color ? { color: m.color } : {}}>{m.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Detalhes expandíveis */}
+      <button className="rel-expand-btn" onClick={() => setExpanded(e => !e)}>
+        {expanded ? '▲ Menos detalhes' : '▼ Ver detalhes de custos'}
+      </button>
+
+      {expanded && (
+        <div className="rel-lote-details">
+          {[
+            { label: 'Qtd Inicial', value: l.quantidade_inicial },
+            { label: 'Qtd Atual', value: l.quantidade_atual },
+            { label: 'Custo Ração', value: fmtMoeda(l.custo_racao) },
+            { label: 'Custo Sanidade', value: fmtMoeda(l.custo_sanidade) },
+            { label: 'Custo Aquisição', value: fmtMoeda(l.custo_aquisicao_animais) },
+          ].map((d, i) => (
+            <div key={i} className="rel-detail-row">
+              <span>{d.label}</span>
+              <strong>{d.value}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const GMD_STATUS = {
+  ok:         { label: 'Normal',      cls: 'badge-green',  icon: '✅' },
+  alerta:     { label: 'Abaixo',      cls: 'badge-yellow', icon: '⚠️' },
+  critico:    { label: 'Crítico',     cls: 'badge-red',    icon: '🔴' },
+  sem_dados:  { label: 'Sem dados',   cls: 'badge-gray',   icon: '⚫' },
+  aguardando: { label: 'Aguardando',  cls: 'badge-blue',   icon: '⏳' },
+}
+
+const FASE_COR = {
+  maternidade: '#9c27b0',
+  creche:      '#1976d2',
+  crescimento: '#009688',
+  terminacao:  '#f57c00',
+}
+
 export default function Relatorios() {
   const [relLotes, setRelLotes] = useState([])
   const [relFin, setRelFin] = useState(null)
+  const [relGmd, setRelGmd] = useState(null)
   const [analise, setAnalise] = useState(null)
   const [analiseLoading, setAnaliseLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('lotes')
+  const [expandedGmd, setExpandedGmd] = useState({})
+  const [precoMercado, setPrecoMercado] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -41,6 +125,12 @@ export default function Relatorios() {
     }).finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    if (tab === 'gmd' && !relGmd) {
+      api.get('/api/relatorios/gmd').then(r => setRelGmd(r.data)).catch(console.error)
+    }
+  }, [tab])
+
   const carregarAnalise = () => {
     setAnaliseLoading(true)
     api.get('/api/analise/venda').then(r => setAnalise(r.data)).catch(() => setAnalise({ erro: 'Não foi possível gerar análise.' })).finally(() => setAnaliseLoading(false))
@@ -50,30 +140,262 @@ export default function Relatorios() {
 
   if (loading) return <Layout title="Relatórios"><div className="loading"><div className="spinner" />Carregando...</div></Layout>
 
-  const desp = relFin?.despesas_por_categoria || []
+  const despFin = relFin?.despesas_por_categoria || []
+  // Adiciona custos operacionais como categorias extras para o gráfico ficar completo
+  const despOp = relFin?.custos_operacionais ? [
+    ...(relFin.custos_operacionais.custo_racao > 0 ? [{ categoria: '🌽 Ração', total: relFin.custos_operacionais.custo_racao }] : []),
+    ...(relFin.custos_operacionais.custo_sanidade > 0 ? [{ categoria: '💉 Sanidade', total: relFin.custos_operacionais.custo_sanidade }] : []),
+    ...((relFin.custos_operacionais.custo_aquisicao_total ?? relFin.custos_operacionais.custo_aquisicao_animais ?? 0) > 0 ? [{ categoria: '🐖 Aquisição', total: relFin.custos_operacionais.custo_aquisicao_total ?? relFin.custos_operacionais.custo_aquisicao_animais }] : []),
+  ] : []
+  // Mescla entradas de ração (financeiro + operacional) numa única barra
+  const isRacao = s => /ra[çc]ao|ração/i.test(s || '')
+  const racaoTotal = [...despFin, ...despOp].filter(d => isRacao(d.categoria)).reduce((s, d) => s + (d.total || 0), 0)
+  const desp = [
+    ...(racaoTotal > 0 ? [{ categoria: '🌽 Ração', total: racaoTotal }] : []),
+    ...[...despFin, ...despOp].filter(d => !isRacao(d.categoria)),
+  ]
   const rec = relFin?.receitas_por_categoria || []
   const maxDesp = Math.max(...desp.map(d => d.total), 1)
   const maxRec = Math.max(...rec.map(r => r.total), 1)
+  const precoNum = parseFloat((precoMercado || '').replace(',', '.')) || 0
 
   const handlePrint = () => {
-    document.title = `Relatório GranjaApp - ${tab === 'lotes' ? 'Lotes' : tab === 'financeiro' ? 'Financeiro' : 'Análise IA'}`
+    if (tab === 'gmd') { gerarPDFGMD(); return }
+    const tituloOriginal = document.title
+    const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')
+    const nomeAba = tab === 'lotes' ? 'Lotes' : tab === 'financeiro' ? 'Financeiro' : 'Análise IA'
+    document.title = `Relatório GranjaApp - ${nomeAba} ${dataHoje}`
     window.print()
+    setTimeout(() => { document.title = tituloOriginal }, 500)
+  }
+
+  const gerarPDFGMD = () => {
+    if (!relGmd) return
+
+    const hoje = new Date().toLocaleDateString('pt-BR')
+    const fmtD = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—'
+    const fmtKg = (v) => v != null && v > 0 ? `${Number(v).toFixed(2)} kg` : '—'
+    const fmtGmd = (v) => v != null ? `${Number(v).toFixed(3)} kg/d` : '—'
+
+    const COR   = { ok: '#198754', alerta: '#856404', critico: '#dc3545', sem_dados: '#6c757d', aguardando: '#0d6efd' }
+    const LABEL = { ok: '✓ Normal', alerta: '⚠ Abaixo', critico: '🔴 Crítico', sem_dados: '— S/dados', aguardando: '⏳ Aguard.' }
+    const FASE  = { maternidade: '#9c27b0', creche: '#1976d2', crescimento: '#009688', terminacao: '#f57c00' }
+    const NCOLS = 10
+
+    const linhasLotes = relGmd.lotes.map((l, i) => {
+      const cor  = COR[l.status_gmd]  || '#6c757d'
+      const fc   = FASE[l.fase?.toLowerCase()] || '#6c757d'
+      const rowBg = l.status_gmd === 'critico' ? '#fff8f8'
+                  : l.status_gmd === 'alerta'  ? '#fffcf0'
+                  : (i % 2 === 0 ? '#fff' : '#f9fafb')
+
+      const faseStr = l.fase_desde_entrada === false && l.data_inicio_fase
+        ? `<span style="color:${fc};font-weight:700;font-size:10px">${l.fase}</span><br><span style="font-size:9px;color:#6c757d">desde ${fmtD(l.data_inicio_fase)}</span>`
+        : `<span style="color:${fc};font-weight:700;font-size:10px">${l.fase}</span>`
+
+      const diasStr = l.dias_na_fase != null && l.dias_na_fase !== l.dias_producao
+        ? `<strong style="font-size:10px">${l.dias_na_fase}d</strong>`
+        : '—'
+
+      const gmdFaseStr = l.gmd_fase != null
+        ? `<strong style="color:${cor};font-size:12px">${Number(l.gmd_fase).toFixed(3)}</strong><span style="font-size:9px;color:#6c757d"> kg/d</span>`
+        : `<span style="color:#0d6efd;font-size:9px;font-weight:700">⏳ Aguard.<br>2ª pesagem</span>`
+
+      const pct = l.pct_ideal != null ? `<strong style="color:${cor};font-size:10px">${l.pct_ideal}%</strong>` : '—'
+      const refMins = relGmd.referencias[l.fase?.toLowerCase()]
+      const minStr = refMins ? `<span style="font-size:10px">${refMins.min}</span>` : '—'
+
+      const P = 'padding:5px 7px 3px 7px;border-bottom:none;vertical-align:middle'
+      const infoRow = `
+        <tr style="background:${rowBg}">
+          <td colspan="${NCOLS}" style="padding:1px 7px 5px 10px;border-bottom:1px solid #e0e0e0;font-size:9px;color:#6c757d">
+            Entrada: <strong>${fmtD(l.data_entrada)}</strong>
+            ${l.dias_producao != null ? ` · Dias total: <strong>${l.dias_producao}d</strong>` : ''}
+          </td>
+        </tr>`
+
+      return `
+        <tr style="background:${rowBg}">
+          <td style="${P}"><strong style="font-size:11px">${l.numero}</strong></td>
+          <td style="${P}">${faseStr}</td>
+          <td style="${P};text-align:center">${diasStr}</td>
+          <td style="${P};text-align:right;color:#495057;font-size:10px">${fmtKg(l.peso_ref_fase)}</td>
+          <td style="${P};text-align:right"><strong style="font-size:11px;color:#212529">${fmtKg(l.peso_atual)}</strong></td>
+          <td style="${P};text-align:center">${gmdFaseStr}</td>
+          <td style="${P};text-align:center;color:#6c757d;font-size:10px">${fmtGmd(l.gmd_total)}</td>
+          <td style="${P};text-align:center">${minStr}</td>
+          <td style="${P};text-align:center">${pct}</td>
+          <td style="${P};text-align:center;font-weight:700;font-size:10px;color:${cor}">${LABEL[l.status_gmd] || '—'}</td>
+        </tr>${infoRow}`
+    }).join('')
+
+    const alertasHTML = relGmd.lotes
+      .filter(l => l.status_gmd === 'critico' || l.status_gmd === 'alerta')
+      .map(l => `
+        <div style="display:flex;gap:8px;align-items:center;padding:5px 10px;margin-bottom:4px;background:${l.status_gmd === 'critico' ? '#fff5f5' : '#fffbf0'};border-left:3px solid ${l.status_gmd === 'critico' ? '#dc3545' : '#f0ad4e'};font-size:10px">
+          <strong>${l.numero}</strong><span style="color:#6c757d">— ${l.fase}</span>
+          ${l.alerta ? `<span style="color:${l.status_gmd === 'critico' ? '#dc3545' : '#856404'}">· ${l.alerta}</span>` : ''}
+        </div>`).join('')
+
+    const refsHTML = Object.entries(relGmd.referencias).map(([fase, ref]) => {
+      const fc = FASE[fase] || '#6c757d'
+      return `<span style="display:inline-block;font-size:9px;padding:2px 8px;border-radius:10px;background:${fc}18;border:1px solid ${fc}55;color:${fc};font-weight:600;margin-right:5px">${ref.label}: mín ${ref.min} · ideal ${ref.ideal} kg/d</span>`
+    }).join('')
+
+    const totalLotes  = relGmd.lotes.length
+    const nOk         = relGmd.resumo?.ok ?? relGmd.lotes.filter(l => l.status_gmd === 'ok').length
+    const nAlerta     = relGmd.resumo?.alertas_atencao ?? relGmd.lotes.filter(l => l.status_gmd === 'alerta').length
+    const nCritico    = relGmd.resumo?.alertas_criticos ?? relGmd.lotes.filter(l => l.status_gmd === 'critico').length
+    const nAguardando = relGmd.lotes.filter(l => l.status_gmd === 'aguardando').length
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Relatório GMD — GranjaApp</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#212529;background:#fff}
+    table{border-collapse:collapse;width:100%;table-layout:fixed}
+    th{font-weight:700;overflow:hidden;text-overflow:ellipsis}
+    td,th{vertical-align:middle}
+    @media print{
+      @page{margin:8mm 10mm 10mm;size:A4 landscape}
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Cabeçalho -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid #1b5e20">
+    <div>
+      <div style="font-size:14px;font-weight:700;color:#1b5e20">GMD — Ganho Médio Diário · GranjaApp</div>
+      <div style="font-size:9px;color:#6c757d;margin-top:1px">Gerado em: <strong>${hoje}</strong> · ${totalLotes} lote${totalLotes !== 1 ? 's' : ''} analisado${totalLotes !== 1 ? 's' : ''}</div>
+    </div>
+  </div>
+
+  <!-- Cards resumo -->
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    ${[
+      { v: totalLotes,   l: 'Total Lotes',  c: '#0d6efd' },
+      { v: nOk,          l: 'GMD Normal',   c: '#198754' },
+      { v: nAguardando,  l: 'Aguardando',   c: '#6c757d' },
+      { v: nAlerta,      l: 'Abaixo Mín.',  c: '#856404' },
+      { v: nCritico,     l: 'Crítico',      c: '#dc3545' },
+    ].map(s => `<div style="flex:1;border:1px solid #dee2e6;border-radius:5px;padding:6px 8px;border-top:2px solid ${s.c};text-align:center">
+      <div style="font-size:20px;font-weight:700;color:${s.c};line-height:1">${s.v}</div>
+      <div style="font-size:8px;color:#6c757d;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${s.l}</div>
+    </div>`).join('')}
+  </div>
+
+  <!-- Alertas -->
+  ${alertasHTML ? `<div style="margin-bottom:6px">${alertasHTML}</div>` : ''}
+
+  <!-- Benchmarks -->
+  <div style="margin-bottom:7px;padding:5px 8px;background:#f8f9fa;border-radius:4px;border:1px solid #e9ecef">
+    <span style="font-size:8px;font-weight:700;color:#495057;text-transform:uppercase;letter-spacing:.4px;margin-right:6px">Referências:</span>
+    ${refsHTML}
+  </div>
+
+  <!-- Tabela principal -->
+  <table>
+    <colgroup>
+      <col style="width:9%"><col style="width:11%"><col style="width:6%">
+      <col style="width:8%"><col style="width:8%"><col style="width:11%">
+      <col style="width:10%"><col style="width:6%"><col style="width:7%"><col style="width:9%">
+    </colgroup>
+    <thead>
+      <tr style="background:#1b5e20;color:#fff;font-size:9px">
+        <th style="padding:5px 7px;text-align:left">LOTE</th>
+        <th style="padding:5px 7px;text-align:left">FASE</th>
+        <th style="padding:5px 4px;text-align:center">DIAS<br>FASE</th>
+        <th style="padding:5px 7px;text-align:right">PESO<br>REF.</th>
+        <th style="padding:5px 7px;text-align:right">PESO<br>ATUAL</th>
+        <th style="padding:5px 7px;text-align:center">GMD FASE ⚡</th>
+        <th style="padding:5px 7px;text-align:center">GMD TOTAL</th>
+        <th style="padding:5px 4px;text-align:center">MÍN.</th>
+        <th style="padding:5px 4px;text-align:center">% IDEAL</th>
+        <th style="padding:5px 7px;text-align:center">STATUS</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${relGmd.lotes.length === 0
+        ? `<tr><td colspan="${NCOLS}" style="padding:20px;text-align:center;color:#6c757d">Nenhum lote com dados de pesagem</td></tr>`
+        : linhasLotes}
+    </tbody>
+  </table>
+
+  <!-- Lotes sem dados -->
+  ${relGmd.sem_dados?.length > 0 ? `
+    <div style="margin-top:8px;padding:6px 10px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:4px">
+      <span style="font-size:9px;font-weight:700;color:#6c757d;margin-right:6px">⚫ SEM DADOS:</span>
+      ${relGmd.sem_dados.map(l => `<span style="padding:2px 8px;background:#fff;border:1px solid #dee2e6;border-radius:8px;font-size:9px;margin-right:4px"><strong>${l.numero}</strong> · ${l.fase || '—'} · <span style="color:#6c757d">${l.motivo || 'sem pesagem'}</span></span>`).join('')}
+    </div>` : ''}
+
+  <!-- Assinaturas -->
+  <div style="margin-top:20px;display:flex;gap:24px">
+    ${['Responsável Técnico / Veterinário', 'Gerente / Responsável', 'Data de Conferência'].map(label => `
+      <div style="flex:1">
+        <div style="height:28px"></div>
+        <div style="border-top:1px solid #6c757d;margin-bottom:4px"></div>
+        <div style="font-size:9px;color:#495057;text-align:center">${label}</div>
+      </div>`).join('')}
+  </div>
+
+</body>
+</html>`
+
+    // Injeta conteúdo na página atual e imprime sem abrir nova aba
+    const existing = document.getElementById('__gmd_print_overlay')
+    if (existing) existing.remove()
+
+    const overlay = document.createElement('div')
+    overlay.id = '__gmd_print_overlay'
+    overlay.style.cssText = 'display:none;position:fixed;inset:0;z-index:9999;background:#fff;overflow:auto'
+    overlay.innerHTML = html
+
+    // Estilos de impressão: esconde tudo menos o overlay
+    const styleTag = document.createElement('style')
+    styleTag.id = '__gmd_print_style'
+    styleTag.textContent = `
+      @media print {
+        body > *:not(#__gmd_print_overlay) { display: none !important; }
+        #__gmd_print_overlay { display: block !important; position: static !important; }
+        @page { margin: 10mm 12mm 14mm; size: A4 landscape; }
+      }
+    `
+    document.head.appendChild(styleTag)
+    document.body.appendChild(overlay)
+
+    const tituloOriginal = document.title
+    const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')
+    document.title = `Relatório GMD — GranjaApp ${dataHoje}`
+
+    setTimeout(() => {
+      window.print()
+      setTimeout(() => {
+        document.title = tituloOriginal
+        overlay.remove()
+        styleTag.remove()
+      }, 500)
+    }, 200)
   }
 
   return (
     <Layout title="Relatórios">
       <div className="page-header no-print">
         <div><h1>📈 Relatórios</h1><p>Análise completa da granja</p></div>
-        <button className="btn btn-outline" onClick={handlePrint}>🖨️ Exportar PDF</button>
+        <button className="btn btn-outline" onClick={handlePrint}>🖨️ PDF</button>
       </div>
 
       <div className="tabs no-print">
         <div className={`tab ${tab === 'lotes' ? 'active' : ''}`} onClick={() => setTab('lotes')}>🐖 Lotes</div>
         <div className={`tab ${tab === 'financeiro' ? 'active' : ''}`} onClick={() => setTab('financeiro')}>💰 Financeiro</div>
+        <div className={`tab ${tab === 'gmd' ? 'active' : ''}`} onClick={() => setTab('gmd')}>📊 GMD</div>
         <div className={`tab ${tab === 'ia' ? 'active' : ''}`} onClick={() => setTab('ia')}>🤖 Análise IA</div>
       </div>
 
-      {/* Print header - only visible when printing */}
       <div className="print-only print-header">
         <h2>GranjaApp — {tab === 'lotes' ? 'Relatório de Lotes' : tab === 'financeiro' ? 'Relatório Financeiro' : 'Análise IA — Momento de Venda'}</h2>
         <p>Gerado em: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')}</p>
@@ -82,23 +404,31 @@ export default function Relatorios() {
       {/* ===== ABA LOTES ===== */}
       {tab === 'lotes' && (
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 16 }}>
             <div className="stat-card"><div className="stat-icon green">🐖</div><div><div className="stat-value">{relLotes.length}</div><div className="stat-label">Total de Lotes</div></div></div>
             <div className="stat-card"><div className="stat-icon blue">✅</div><div><div className="stat-value">{relLotes.filter(l => l.status === 'ativo').length}</div><div className="stat-label">Lotes Ativos</div></div></div>
             <div className="stat-card"><div className="stat-icon teal">🐷</div><div><div className="stat-value">{relLotes.reduce((s, l) => s + (l.quantidade_atual || 0), 0)}</div><div className="stat-label">Animais Ativos</div></div></div>
-            <div className="stat-card"><div className="stat-icon yellow">⚖️</div><div><div className="stat-value">{fmtNum(relLotes.reduce((s, l) => s + (l.peso_medio_saida || 0), 0) / Math.max(relLotes.length, 1))} kg</div><div className="stat-label">Peso Médio Saída</div></div></div>
+            <div className="stat-card"><div className="stat-icon yellow">⚖️</div><div><div className="stat-value">{fmtNum(relLotes.reduce((s, l) => s + (l.peso_medio_saida || 0), 0) / Math.max(relLotes.length, 1))} kg</div><div className="stat-label">Peso Médio</div></div></div>
           </div>
 
-          <div className="card" style={{ marginBottom: 16 }}>
+          {/* Mobile: cards por lote */}
+          <div className="rel-lotes-mobile">
+            {relLotes.length === 0
+              ? <div className="card"><div className="table-empty"><span className="empty-icon">🐖</span>Nenhum lote cadastrado</div></div>
+              : relLotes.map(l => <LoteCard key={l.id} l={l} />)
+            }
+          </div>
+
+          {/* Desktop: tabela completa */}
+          <div className="rel-lotes-desktop card" style={{ marginBottom: 16 }}>
             <div className="card-title">📋 Detalhes por Lote</div>
             <div style={{ overflowX: 'auto', marginTop: 12 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Lote</th><th>Fase</th><th>Status</th><th>Qtd Inicial</th><th>Qtd Atual</th>
-                    <th>Mortalidade</th><th>Custo Ração</th><th>Custo Sanidade</th><th>Custo Aquisição</th><th>Total Custos</th><th>Custo/Animal</th><th>Receita</th><th>Resultado</th>
-                  </tr>
-                </thead>
+              <table style={{ fontSize: 12 }}>
+                <thead><tr style={{ whiteSpace: 'nowrap' }}>
+                  <th>Lote</th><th>Fase</th><th>Status</th><th>Qtd Ini.</th><th>Qtd Atual</th>
+                  <th>Mortalidade</th><th>Custo Ração</th><th>Custo Sanidade</th><th>Custo Aquisição</th>
+                  <th>Total Custos</th><th>Custo/Animal</th><th>Receita</th><th>Resultado</th>
+                </tr></thead>
                 <tbody>
                   {relLotes.length === 0
                     ? <tr><td colSpan={13} className="table-empty">Nenhum lote cadastrado</td></tr>
@@ -126,7 +456,7 @@ export default function Relatorios() {
             </div>
           </div>
 
-          <div className="card">
+          <div className="card no-print">
             <div className="card-title">📊 Mortalidade por Lote (%)</div>
             <div style={{ marginTop: 16 }}>
               <BarChart items={relLotes.map(l => ({ label: l.numero, value: l.taxa_mortalidade, formatted: `${fmtNum(l.taxa_mortalidade)}%` }))} maxValue={Math.max(...relLotes.map(l => l.taxa_mortalidade), 1)} color="red" />
@@ -138,65 +468,87 @@ export default function Relatorios() {
       {/* ===== ABA FINANCEIRO ===== */}
       {tab === 'financeiro' && relFin && (
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
-            <div className="stat-card"><div className="stat-icon green">📈</div><div><div className="stat-value" style={{ fontSize: 18 }}>{fmtMoeda(relFin.total_receitas)}</div><div className="stat-label">Total Receitas</div></div></div>
-            <div className="stat-card"><div className="stat-icon red">📉</div><div><div className="stat-value" style={{ fontSize: 18 }}>{fmtMoeda(relFin.total_despesas)}</div><div className="stat-label">Total Despesas</div></div></div>
-            <div className="stat-card" style={{ borderLeft: `4px solid ${relFin.saldo >= 0 ? '#198754' : '#dc3545'}` }}>
-              <div className="stat-icon">{relFin.saldo >= 0 ? '✅' : '⚠️'}</div>
-              <div><div className="stat-value" style={{ fontSize: 18, color: relFin.saldo >= 0 ? '#198754' : '#dc3545' }}>{fmtMoeda(relFin.saldo)}</div><div className="stat-label">Saldo</div></div>
+          {/* Saldo em destaque */}
+          <div className="rel-fin-saldo" style={{ borderColor: relFin.saldo >= 0 ? '#198754' : '#dc3545' }}>
+            <div className="rel-fin-saldo-label" style={{ fontSize: 11 }}>Saldo da Operação</div>
+            <div className="rel-fin-saldo-value" style={{ color: relFin.saldo >= 0 ? '#198754' : '#dc3545', fontSize: 26 }}>
+              {relFin.saldo >= 0 ? '✅' : '⚠️'} {fmtMoeda(relFin.saldo)}
+            </div>
+            <div style={{ fontSize: 11, color: '#6c757d', marginTop: 6, display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <span>📈 Receitas: <strong style={{ color: '#198754' }}>{fmtMoeda(relFin.total_receitas)}</strong></span>
+              <span>📉 Despesas: <strong style={{ color: '#dc3545' }}>{fmtMoeda(relFin.total_custos ?? (relFin.total_despesas + relFin.total_operacional))}</strong></span>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          {/* Receitas e Despesas */}
+          <div className="rel-fin-grid">
+            <div className="stat-card">
+              <div className="stat-icon green">📈</div>
+              <div><div className="stat-value" style={{ fontSize: 15 }}>{fmtMoeda(relFin.total_receitas)}</div><div className="stat-label">Total Receitas</div></div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon red">📉</div>
+              <div>
+                <div className="stat-value" style={{ fontSize: 15 }}>{fmtMoeda(relFin.total_custos ?? (relFin.total_despesas + relFin.total_operacional))}</div>
+                <div className="stat-label">Total Despesas</div>
+                <div style={{ fontSize: 10, color: '#6c757d', marginTop: 2 }}>
+                  Financeiro + Operacional
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Gráficos */}
+          <div className="rel-charts-grid">
             <div className="card">
               <div className="card-title">📉 Despesas por Categoria</div>
-              <div style={{ marginTop: 16 }}><BarChart items={desp.map(d => ({ label: d.categoria || 'Outros', value: d.total, formatted: fmtMoeda(d.total) }))} maxValue={maxDesp} color="red" /></div>
+              <div style={{ marginTop: 12 }}><BarChart items={desp.map(d => ({ label: d.categoria || 'Outros', value: d.total, formatted: fmtMoeda(d.total) }))} maxValue={maxDesp} color="red" /></div>
             </div>
             <div className="card">
               <div className="card-title">📈 Receitas por Categoria</div>
-              <div style={{ marginTop: 16 }}><BarChart items={rec.map(r => ({ label: r.categoria || 'Outros', value: r.total, formatted: fmtMoeda(r.total) }))} maxValue={maxRec} /></div>
+              <div style={{ marginTop: 12 }}><BarChart items={rec.map(r => ({ label: r.categoria || 'Outros', value: r.total, formatted: fmtMoeda(r.total) }))} maxValue={maxRec} /></div>
             </div>
           </div>
 
+          {/* Resultado por lote */}
           {relFin.resultado_por_lote?.length > 0 && (
             <div className="card" style={{ marginTop: 16 }}>
               <div className="card-title">🐖 Resultado por Lote</div>
-              <div style={{ overflowX: 'auto', marginTop: 12 }}>
-                <table>
-                  <thead>
-                    <tr><th>Lote</th><th>Status</th><th>Receita</th><th>Custo Total</th><th>Resultado</th></tr>
-                  </thead>
-                  <tbody>
-                    {relFin.resultado_por_lote.map(l => (
-                      <tr key={l.lote_id}>
-                        <td><strong>{l.lote_numero}</strong></td>
-                        <td><span className={`badge ${l.status === 'ativo' ? 'badge-green' : l.status === 'vendido' ? 'badge-blue' : 'badge-gray'}`}>{l.status}</span></td>
-                        <td style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(l.receita)}</td>
-                        <td style={{ color: '#dc3545' }}>{fmtMoeda(l.custo_total)}</td>
-                        <td style={{ fontWeight: 700, color: l.resultado >= 0 ? '#198754' : '#dc3545' }}>
-                          {l.resultado >= 0 ? '+' : ''}{fmtMoeda(l.resultado)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                {relFin.resultado_por_lote.map(l => (
+                  <div key={l.lote_id} className="rel-resultado-row">
+                    <div className="rel-resultado-info">
+                      <strong>{l.lote_numero}</strong>
+                      <span className={`badge ${l.status === 'ativo' ? 'badge-green' : l.status === 'vendido' ? 'badge-blue' : 'badge-gray'}`}>{l.status}</span>
+                    </div>
+                    <div className="rel-resultado-values">
+                      <span style={{ color: '#198754', fontSize: 12 }}>↑ {fmtMoeda(l.receita)}</span>
+                      <span style={{ color: '#dc3545', fontSize: 12 }}>↓ {fmtMoeda(l.custo_total)}</span>
+                      <strong style={{ color: l.resultado >= 0 ? '#198754' : '#dc3545', fontSize: 14 }}>
+                        {l.resultado >= 0 ? '+' : ''}{fmtMoeda(l.resultado)}
+                      </strong>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
+          {/* Custos operacionais */}
           {relFin.custos_operacionais && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <div className="card-title">⚙️ Custos Operacionais</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 12 }}>
+            <div className="card" style={{ marginTop: 14 }}>
+              <div className="card-title" style={{ fontSize: 13 }}>⚙️ Custos Operacionais</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginTop: 10 }}>
                 {[
-                  { label: 'Custo Ração', value: relFin.custos_operacionais.custo_racao },
-                  { label: 'Custo Sanidade', value: relFin.custos_operacionais.custo_sanidade },
-                  { label: 'Custo Aquisição', value: relFin.custos_operacionais.custo_aquisicao_animais },
-                  { label: 'Total Operacional', value: relFin.custos_operacionais.total_operacional, bold: true },
+                  { label: '🌽 Ração',            value: relFin.custos_operacionais.custo_racao },
+                  { label: '💉 Sanidade',          value: relFin.custos_operacionais.custo_sanidade },
+                  { label: '🐷 Aquis. Lotes',      value: relFin.custos_operacionais.custo_aquisicao_animais },
+                  { label: '🐖 Aquis. Plantel',    value: relFin.custos_operacionais.custo_aquisicao_plantel ?? 0 },
+                  { label: '⚙️ Total Operac.',     value: relFin.custos_operacionais.total_operacional, bold: true },
                 ].map((item, i) => (
-                  <div key={i} style={{ padding: '10px 14px', background: '#f8f9fa', borderRadius: 8 }}>
-                    <div style={{ fontSize: 12, color: '#6c757d' }}>{item.label}</div>
-                    <div style={{ fontWeight: item.bold ? 700 : 600, fontSize: 16, color: '#212529', marginTop: 2 }}>{fmtMoeda(item.value)}</div>
+                  <div key={i} style={{ padding: '8px 10px', background: '#f8f9fa', borderRadius: 7, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, color: '#6c757d', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</div>
+                    <div style={{ fontWeight: item.bold ? 700 : 600, fontSize: 13, color: '#212529', marginTop: 3, whiteSpace: 'nowrap' }}>{fmtMoeda(item.value)}</div>
                   </div>
                 ))}
               </div>
@@ -205,59 +557,328 @@ export default function Relatorios() {
         </div>
       )}
 
+      {/* ===== ABA GMD ===== */}
+      {tab === 'gmd' && (
+        <div>
+          {relGmd && <div style={{ marginBottom: 12 }} />}
+          {!relGmd ? (
+            <div className="loading"><div className="spinner" />Carregando GMD...</div>
+          ) : (
+            <>
+              {/* Cards de resumo */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
+                {[
+                  { icon: '📊', label: 'Lotes com dados', value: relGmd.resumo.com_dados, cls: 'blue' },
+                  { icon: '✅', label: 'GMD Normal', value: relGmd.resumo.ok, cls: 'green' },
+                  { icon: '⚠️', label: 'Abaixo mín.', value: relGmd.resumo.alertas_atencao, cls: 'yellow' },
+                  { icon: '🔴', label: 'GMD Crítico', value: relGmd.resumo.alertas_criticos, cls: 'red' },
+                ].map((s, i) => (
+                  <div className="stat-card" key={i}>
+                    <div className={`stat-icon ${s.cls}`}>{s.icon}</div>
+                    <div><div className="stat-value">{s.value}</div><div className="stat-label">{s.label}</div></div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Alertas críticos em destaque */}
+              {relGmd.lotes.filter(l => l.status_gmd === 'critico' || l.status_gmd === 'alerta').map(l => (
+                <div key={l.lote_id} style={{
+                  padding: '10px 14px', borderRadius: 8, marginBottom: 8,
+                  background: l.status_gmd === 'critico' ? '#fff5f5' : '#fffbf0',
+                  border: `1px solid ${l.status_gmd === 'critico' ? '#f5c2c7' : '#ffe69c'}`,
+                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap'
+                }}>
+                  <span style={{ fontSize: 18 }}>{l.status_gmd === 'critico' ? '🔴' : '⚠️'}</span>
+                  <div style={{ flex: 1 }}>
+                    <strong>Lote {l.numero}</strong>
+                    <span className="badge badge-gray" style={{ marginLeft: 6, background: FASE_COR[l.fase?.toLowerCase()] + '22', color: FASE_COR[l.fase?.toLowerCase()] || '#666', border: `1px solid ${FASE_COR[l.fase?.toLowerCase()] || '#ccc'}44` }}>{l.fase}</span>
+                    <span style={{ marginLeft: 8, fontSize: 13, color: '#495057' }}>{l.alerta}</span>
+                  </div>
+                  <strong style={{ color: l.status_gmd === 'critico' ? '#dc3545' : '#856404', fontSize: 15 }}>
+                    {l.gmd?.toFixed(3)} kg/dia
+                  </strong>
+                </div>
+              ))}
+
+              {/* Tabela comparativa */}
+              <div className="card" style={{ marginBottom: 16 }}>
+                <div className="card-title">📋 Tabela Comparativa de GMD</div>
+
+                {/* Referências */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '10px 0 14px' }}>
+                  {Object.entries(relGmd.referencias).map(([fase, ref]) => (
+                    <div key={fase} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, background: (FASE_COR[fase] || '#6c757d') + '18', border: `1px solid ${(FASE_COR[fase] || '#6c757d')}44`, color: FASE_COR[fase] || '#6c757d', fontWeight: 600 }}>
+                      {ref.label}: mín {ref.min} · ideal {ref.ideal} kg/dia
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ fontSize: 12, width: '100%' }}>
+                    <thead>
+                      <tr style={{ whiteSpace: 'nowrap' }}>
+                        <th>Lote</th>
+                        <th>Fase</th>
+                        <th>Status</th>
+                        <th>Dias na fase</th>
+                        <th>Peso ref. fase</th>
+                        <th>Peso atual</th>
+                        <th>GMD fase ⚡</th>
+                        <th>GMD total</th>
+                        <th>Mín. esperado</th>
+                        <th>Ideal</th>
+                        <th>% do ideal</th>
+                        <th>Pesagens</th>
+                        <th>Status GMD</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {relGmd.lotes.length === 0 ? (
+                        <tr><td colSpan={13} className="table-empty">Nenhum lote com dados de pesagem</td></tr>
+                      ) : relGmd.lotes.map(l => {
+                        const st = GMD_STATUS[l.status_gmd] || GMD_STATUS.sem_dados
+                        // Quando aguardando, usar gmd_total como referência visual (sem afetar status/alertas)
+                        const gmdExibir = l.gmd_fase ?? l.gmd_total
+                        const isGmdTotal = l.gmd_fase == null && l.gmd_total != null
+                        const pctExibir = l.pct_ideal ?? (gmdExibir != null && l.ref_ideal != null ? +((gmdExibir / l.ref_ideal) * 100).toFixed(1) : null)
+                        const pctCor = pctExibir >= 100 ? '#198754' : pctExibir >= 70 ? '#856404' : '#dc3545'
+                        const gmdCor = l.status_gmd === 'critico' ? '#dc3545' : l.status_gmd === 'alerta' ? '#856404' : isGmdTotal ? '#6c757d' : '#198754'
+                        const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
+                        return (
+                          <tr key={l.lote_id} style={{ background: l.status_gmd === 'critico' ? '#fff5f5' : l.status_gmd === 'alerta' ? '#fffbf0' : 'inherit' }}>
+                            <td>
+                              <strong>{l.numero}</strong>
+                              <div style={{ fontSize: 10, color: '#6c757d' }}>entrada: {fmtDate(l.data_entrada)}</div>
+                            </td>
+                            <td>
+                              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: (FASE_COR[l.fase?.toLowerCase()] || '#6c757d') + '20', color: FASE_COR[l.fase?.toLowerCase()] || '#6c757d', fontWeight: 600 }}>
+                                {l.fase}
+                              </span>
+                              {!l.fase_desde_entrada && l.data_inicio_fase && (
+                                <div style={{ fontSize: 10, color: '#6c757d', marginTop: 2 }}>desde {fmtDate(l.data_inicio_fase)}</div>
+                              )}
+                            </td>
+                            <td><span className={`badge ${l.status === 'ativo' ? 'badge-green' : l.status === 'vendido' ? 'badge-blue' : 'badge-gray'}`}>{l.status}</span></td>
+                            <td>
+                              <span style={{ fontWeight: 600 }}>{l.dias_na_fase}d</span>
+                              {l.dias_na_fase !== l.dias_producao && (
+                                <div style={{ fontSize: 10, color: '#6c757d' }}>{l.dias_producao}d total</div>
+                              )}
+                            </td>
+                            <td style={{ color: '#6c757d' }}>{l.peso_ref_fase > 0 ? `${l.peso_ref_fase} kg` : '-'}</td>
+                            <td style={{ fontWeight: 600 }}>{l.peso_atual} kg</td>
+                            <td style={{ fontWeight: 700, fontSize: 13, color: gmdCor }}>
+                              {gmdExibir != null ? `${gmdExibir.toFixed(3)} kg/d` : '—'}
+                              {isGmdTotal && <div style={{ fontSize: 9, color: '#6c757d', fontWeight: 400 }}>geral</div>}
+                              {!isGmdTotal && l.n_pesagens_fase != null && l.n_pesagens_fase < 2 && l.gmd_fase != null && (
+                                <div style={{ fontSize: 9, color: '#6c757d', fontWeight: 400 }}>1 pesagem</div>
+                              )}
+                            </td>
+                            <td style={{ color: '#6c757d', fontSize: 11 }}>
+                              {l.gmd_total != null ? `${l.gmd_total.toFixed(3)} kg/d` : '—'}
+                            </td>
+                            <td style={{ color: '#6c757d' }}>{l.ref_min != null ? `${l.ref_min} kg/d` : '-'}</td>
+                            <td style={{ color: '#6c757d' }}>{l.ref_ideal != null ? `${l.ref_ideal} kg/d` : '-'}</td>
+                            <td>
+                              {pctExibir != null ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <div style={{ flex: 1, height: 6, background: '#e9ecef', borderRadius: 3, minWidth: 40 }}>
+                                    <div style={{ height: '100%', borderRadius: 3, background: isGmdTotal ? '#adb5bd' : pctCor, width: `${Math.min(pctExibir, 100)}%` }} />
+                                  </div>
+                                  <span style={{ fontWeight: 600, color: isGmdTotal ? '#6c757d' : pctCor, fontSize: 11 }}>{pctExibir}%</span>
+                                </div>
+                              ) : '-'}
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              {l.n_pesagens > 0 ? (
+                                <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#0d6efd' }}
+                                  onClick={() => setExpandedGmd(e => ({ ...e, [l.lote_id]: !e[l.lote_id] }))}>
+                                  {l.n_pesagens} ⚖️ {expandedGmd[l.lote_id] ? '▲' : '▼'}
+                                </button>
+                              ) : <span style={{ color: '#adb5bd' }}>—</span>}
+                            </td>
+                            <td><span className={`badge ${st.cls}`}>{st.icon} {st.label}</span></td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Histórico expandido de pesagens */}
+                {relGmd.lotes.filter(l => expandedGmd[l.lote_id] && l.historico_pesagens?.length > 0).map(l => (
+                  <div key={`hist-${l.lote_id}`} style={{ marginTop: 12, padding: '12px 14px', background: '#f8f9fa', borderRadius: 8, border: '1px solid #dee2e6' }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: '#495057' }}>
+                      📋 Histórico de pesagens — Lote {l.numero}
+                      {!l.fase_desde_entrada && <span style={{ fontSize: 11, color: '#6c757d', fontWeight: 400, marginLeft: 8 }}>⚡ = pesagens usadas no GMD da fase atual</span>}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {l.historico_pesagens.map((p, i) => {
+                        const ref = relGmd.referencias[l.fase?.toLowerCase()]
+                        const gmdOk = p.gmd_intervalo != null && ref ? p.gmd_intervalo >= ref.min : null
+                        return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, padding: '6px 10px', background: p.fase_atual ? '#f0fff4' : '#fff', borderRadius: 6, border: `1px solid ${p.fase_atual ? '#a3cfbb' : '#e9ecef'}` }}>
+                            {!l.fase_desde_entrada && <span title={p.fase_atual ? 'Fase atual' : 'Fase anterior'} style={{ fontSize: 14 }}>{p.fase_atual ? '⚡' : '◦'}</span>}
+                            <span style={{ color: '#6c757d', minWidth: 80 }}>{new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                            <span style={{ fontWeight: 600, color: '#198754' }}>{p.peso_medio} kg</span>
+                            {p.total_animais && <span style={{ color: '#6c757d' }}>{p.total_animais} animais</span>}
+                            {p.gmd_intervalo != null && (
+                              <span style={{ fontWeight: 700, color: gmdOk === false ? '#dc3545' : gmdOk === true ? '#198754' : '#495057' }}>
+                                GMD: {p.gmd_intervalo.toFixed(3)} kg/dia
+                                {p.dias_intervalo && <span style={{ fontWeight: 400, color: '#6c757d' }}> ({p.dias_intervalo}d)</span>}
+                                {gmdOk === false && <span style={{ color: '#dc3545', marginLeft: 4 }}>⚠️</span>}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Lotes sem dados */}
+              {relGmd.sem_dados?.length > 0 && (
+                <div className="card" style={{ marginTop: 8 }}>
+                  <div className="card-title" style={{ color: '#6c757d' }}>⚫ Lotes sem dados de GMD</div>
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {relGmd.sem_dados.map(l => (
+                      <div key={l.lote_id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 10px', background: '#f8f9fa', borderRadius: 6, fontSize: 13 }}>
+                        <strong>Lote {l.numero}</strong>
+                        <span className="badge badge-gray">{l.fase}</span>
+                        <span style={{ color: '#6c757d' }}>{l.motivo}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* ===== ABA ANÁLISE IA ===== */}
       {tab === 'ia' && (
         <div>
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
               <div>
-                <div className="card-title">🤖 Análise IA — Momento Ideal de Venda</div>
-                <p style={{ color: '#6c757d', fontSize: 13, marginTop: 4 }}>Análise baseada em ganho de peso, custo operacional e métricas de produção por lote.</p>
+                <div className="card-title" style={{ fontSize: 14 }}>🤖 Análise IA — Momento Ideal de Venda</div>
+                <p style={{ color: '#6c757d', fontSize: 12, marginTop: 3 }}>Análise por ganho de peso, custo e métricas de produção.</p>
               </div>
               <button className="btn btn-outline no-print" onClick={carregarAnalise} disabled={analiseLoading}>
-                {analiseLoading ? '⏳ Analisando...' : '🔄 Atualizar Análise'}
+                {analiseLoading ? '⏳ Analisando...' : '🔄 Atualizar'}
               </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, paddingTop: 10, borderTop: '1px solid #e9ecef', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#495057' }}>💰 Preço de mercado:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#6c757d' }}>R$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0,00"
+                  value={precoMercado}
+                  onChange={e => setPrecoMercado(e.target.value)}
+                  style={{ width: 80, padding: '4px 8px', border: '1px solid #ced4da', borderRadius: 6, fontSize: 13, textAlign: 'right' }}
+                />
+                <span style={{ fontSize: 12, color: '#6c757d' }}>/kg</span>
+              </div>
+              {precoNum > 0
+                ? <span style={{ fontSize: 11, color: '#198754', fontWeight: 600 }}>✅ Analisando ao preço de {fmtMoeda(precoNum)}/kg</span>
+                : <span style={{ fontSize: 11, color: '#6c757d', fontStyle: 'italic' }}>Informe o preço praticado para ver rentabilidade real</span>
+              }
             </div>
           </div>
 
           {analiseLoading && <div className="loading"><div className="spinner" />Analisando dados dos lotes...</div>}
-
           {analise?.erro && <div className="error-msg">{analise.erro}</div>}
-
           {analise?.lotes?.length === 0 && (
-            <div className="card"><div className="table-empty"><span className="empty-icon">🤖</span>Nenhum lote ativo para analisar. Cadastre lotes e animais primeiro.</div></div>
+            <div className="card"><div className="table-empty"><span className="empty-icon">🤖</span>Nenhum lote ativo para analisar.</div></div>
           )}
 
           {analise?.lotes?.map(l => (
-            <div key={l.lote_id} className="card" style={{ marginBottom: 16, borderLeft: `4px solid ${l.cor_recomendacao}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                    <strong style={{ fontSize: 17 }}>Lote {l.numero}</strong>
-                    <span className="badge" style={{ background: l.cor_recomendacao, color: '#fff', fontWeight: 700 }}>{l.icone_recomendacao} {l.recomendacao}</span>
-                    <span className={`badge ${l.fase === 'terminacao' ? 'badge-yellow' : 'badge-blue'}`}>{l.fase || '-'}</span>
-                  </div>
-                  <p style={{ color: '#495057', fontSize: 14, margin: 0 }}>{l.justificativa}</p>
-                </div>
+            <div key={l.lote_id} className="card" style={{ marginBottom: 12, borderLeft: `4px solid ${l.cor_recomendacao}` }}>
+              {/* Cabeçalho do lote */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 5 }}>
+                <strong style={{ fontSize: 15 }}>Lote {l.numero}</strong>
+                <span className="badge" style={{ background: l.cor_recomendacao, color: '#fff', fontWeight: 700 }}>{l.icone_recomendacao} {l.recomendacao}</span>
+                <span className={`badge ${l.fase === 'terminacao' ? 'badge-yellow' : 'badge-blue'}`}>{l.fase || '-'}</span>
               </div>
+              <p style={{ color: '#495057', fontSize: 12, marginBottom: 10 }}>{l.justificativa}</p>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 12 }}>
+              {/* Métricas em grid 2x2 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
                 {[
-                  { label: 'Animais ativos', value: l.qtd_animais },
-                  { label: 'Peso médio atual', value: `${fmtNum(l.peso_medio_atual)} kg` },
-                  { label: 'Ganho/dia', value: `${fmtNum(l.ganho_diario_medio, 3)} kg/dia` },
-                  { label: 'Dias em produção', value: l.dias_em_producao },
+                  { label: 'Animais', value: l.qtd_animais },
+                  { label: 'Peso médio', value: `${fmtNum(l.peso_medio_atual)} kg` },
+                  { label: 'Ganho/dia', value: `${fmtNum(l.ganho_diario_medio, 3)} kg/d` },
+                  { label: 'Dias prod.', value: l.dias_em_producao },
+                  { label: 'Peso total est.', value: `${fmtNum(l.peso_total_kg, 1)} kg` },
+                  { label: 'Custo/kg', value: `${fmtMoeda(l.custo_por_kg)}/kg` },
                   { label: 'Custo total', value: fmtMoeda(l.custo_total) },
-                  { label: 'Custo por kg', value: `${fmtMoeda(l.custo_por_kg)}/kg` },
-                  { label: 'Preço mín. lucro', value: `${fmtMoeda(l.preco_minimo_lucro)}/kg` },
-                  { label: 'Dias para peso alvo', value: l.dias_para_peso_alvo > 0 ? `${l.dias_para_peso_alvo} dias` : '— atingido' },
+                  { label: 'Dias p/ alvo', value: l.dias_para_peso_alvo > 0 ? `~${l.dias_para_peso_alvo}d` : l.dias_para_peso_alvo === 0 ? '✅ atingido' : '—' },
                 ].map((m, i) => (
-                  <div key={i} style={{ background: '#f8f9fa', borderRadius: 6, padding: '8px 10px' }}>
-                    <div style={{ fontSize: 11, color: '#6c757d' }}>{m.label}</div>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: '#212529', marginTop: 2 }}>{m.value}</div>
+                  <div key={i} style={{ background: '#f8f9fa', borderRadius: 6, padding: '7px 9px' }}>
+                    <div style={{ fontSize: 9, color: '#6c757d', textTransform: 'uppercase', fontWeight: 600 }}>{m.label}</div>
+                    <div style={{ fontWeight: 600, fontSize: 12, color: '#212529', marginTop: 2 }}>{m.value}</div>
                   </div>
                 ))}
               </div>
+
+              {/* Seção: Análise de Preço de Venda */}
+              {(() => {
+                const recMercado = precoNum * l.peso_total_kg
+                const lucMercado = recMercado - l.custo_total
+                const margPct = l.preco_breakeven > 0 ? ((precoNum / l.preco_breakeven - 1) * 100).toFixed(1) : null
+                const positivo = lucMercado >= 0
+                return (
+                  <div style={{ background: '#f8faff', border: '1px solid #d0e4ff', borderRadius: 8, padding: '11px 13px', marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#0d6efd', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 9 }}>
+                      💰 Análise de Preço de Venda
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: precoNum > 0 ? '1fr 1fr 1fr' : '1fr 1fr', gap: 7, marginBottom: 8 }}>
+                      {/* Equilíbrio */}
+                      <div style={{ background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: 7, padding: '8px 9px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: '#6c757d', textTransform: 'uppercase', marginBottom: 3 }}>EQUILÍBRIO</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: '#495057' }}>{fmtMoeda(l.preco_breakeven)}<span style={{ fontSize: 9, fontWeight: 400 }}>/kg</span></div>
+                        <div style={{ fontSize: 10, color: '#6c757d', marginTop: 4, borderTop: '1px solid #dee2e6', paddingTop: 4 }}>
+                          <div>Cobre custos (0% lucro)</div>
+                          <div style={{ marginTop: 1 }}>Receita: <strong>{fmtMoeda(l.receita_breakeven)}</strong></div>
+                        </div>
+                      </div>
+                      {/* Mínimo +15% */}
+                      <div style={{ background: '#fff8f0', border: '1px solid #fd7e1430', borderRadius: 7, padding: '8px 9px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: '#fd7e14', textTransform: 'uppercase', marginBottom: 3 }}>CUSTO +15%</div>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: '#fd7e14' }}>{fmtMoeda(l.preco_minimo_lucro)}<span style={{ fontSize: 9, fontWeight: 400 }}>/kg</span></div>
+                        <div style={{ fontSize: 10, color: '#495057', marginTop: 4, borderTop: '1px solid #fd7e1420', paddingTop: 4 }}>
+                          <div>Receita: <strong>{fmtMoeda(l.receita_minima)}</strong></div>
+                          <div style={{ color: '#fd7e14', fontWeight: 600, marginTop: 1 }}>Lucro: +{fmtMoeda(l.lucro_minimo)}</div>
+                        </div>
+                      </div>
+                      {/* Preço de mercado */}
+                      {precoNum > 0 && (
+                        <div style={{ background: positivo ? '#f0fff4' : '#fff5f5', border: `2px solid ${positivo ? '#198754' : '#dc3545'}`, borderRadius: 7, padding: '8px 9px', textAlign: 'center' }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: positivo ? '#198754' : '#dc3545', textTransform: 'uppercase', marginBottom: 3 }}>PREÇO MERCADO</div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: positivo ? '#198754' : '#dc3545' }}>{fmtMoeda(precoNum)}<span style={{ fontSize: 9, fontWeight: 400 }}>/kg</span></div>
+                          <div style={{ fontSize: 10, color: '#495057', marginTop: 4, borderTop: `1px solid ${positivo ? '#a3d9b122' : '#f5c2c722'}`, paddingTop: 4 }}>
+                            <div>Receita: <strong>{fmtMoeda(recMercado)}</strong></div>
+                            <div style={{ color: positivo ? '#198754' : '#dc3545', fontWeight: 700, marginTop: 1 }}>
+                              {positivo ? 'Lucro' : 'Prejuízo'}: {positivo ? '+' : ''}{fmtMoeda(lucMercado)}
+                            </div>
+                            {margPct !== null && <div style={{ color: '#6c757d', marginTop: 1 }}>Margem: {margPct}%</div>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#6c757d', fontStyle: 'italic' }}>
+                      * {fmtNum(l.peso_total_kg, 1)} kg estimados ({l.qtd_animais} × {fmtNum(l.peso_medio_atual)} kg)
+                      {precoNum <= 0 && <span style={{ color: '#0d6efd' }}> · Informe o preço de mercado acima para análise completa</span>}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {l.alertas?.length > 0 && (
                 <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6, padding: '8px 12px', fontSize: 13 }}>
@@ -270,11 +891,18 @@ export default function Relatorios() {
           {analise?.resumo && (
             <div className="card" style={{ background: '#f8fff9', border: '1px solid #c3e6cb' }}>
               <div className="card-title">📊 Resumo Geral</div>
-              <div style={{ marginTop: 10, fontSize: 14, color: '#212529', lineHeight: 1.7 }}>
-                <div>🐖 Lotes analisados: <strong>{analise.resumo.total_lotes}</strong></div>
-                <div>✅ Prontos para venda: <strong style={{ color: '#198754' }}>{analise.resumo.prontos_venda}</strong></div>
-                <div>⏳ Aguardar: <strong style={{ color: '#0d6efd' }}>{analise.resumo.aguardar}</strong></div>
-                <div>💰 Receita potencial estimada: <strong style={{ color: '#198754' }}>{fmtMoeda(analise.resumo.receita_potencial)}</strong></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+                {[
+                  { label: 'Lotes analisados', value: analise.resumo.total_lotes },
+                  { label: 'Prontos p/ venda', value: analise.resumo.prontos_venda, color: '#198754' },
+                  { label: 'Aguardar', value: analise.resumo.aguardar, color: '#0d6efd' },
+                  { label: 'Receita potencial', value: fmtMoeda(analise.resumo.receita_potencial), color: '#198754' },
+                ].map((m, i) => (
+                  <div key={i} style={{ padding: '10px 12px', background: '#fff', borderRadius: 8, border: '1px solid #c3e6cb' }}>
+                    <div style={{ fontSize: 11, color: '#6c757d', textTransform: 'uppercase', fontWeight: 600 }}>{m.label}</div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: m.color || '#212529', marginTop: 4 }}>{m.value}</div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

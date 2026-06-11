@@ -3,6 +3,8 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const categoriaBadge = { racao: 'badge-green', medicamento: 'badge-blue', vacina: 'badge-purple', outro: 'badge-gray' }
 const categoriaLabel = { racao: 'Ração', medicamento: 'Medicamento', vacina: 'Vacina', outro: 'Outro' }
@@ -12,6 +14,8 @@ const emptyForm = { nome: '', categoria: 'racao', unidade: 'kg', quantidade: '',
 
 export default function Estoque() {
   const { canEdit, canWrite } = useAuth()
+  const toast = useToast()
+  const confirm = useConfirm()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterCat, setFilterCat] = useState('')
@@ -46,17 +50,17 @@ export default function Estoque() {
   const openEntrada = (item) => { setSelectedItem(item); setEntradaForm({ quantidade: '', custo_unitario: item.custo_unitario || '' }); setShowEntradaModal(true) }
 
   const handleEntrada = async () => {
-    if (!entradaForm.quantidade) { alert('Informe a quantidade'); return }
+    if (!entradaForm.quantidade) { toast.warning('Informe a quantidade'); return }
     setSaving(true)
-    try { await api.post(`/api/estoque/${selectedItem.id}/entrada`, entradaForm); setShowEntradaModal(false); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro ao registrar entrada') }
+    try { await api.post(`/api/estoque/${selectedItem.id}/entrada`, entradaForm); setShowEntradaModal(false); load(); toast.success('Entrada registrada com sucesso!') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao registrar entrada') }
     finally { setSaving(false) }
   }
 
   const handleDelete = async (i) => {
-    if (!window.confirm(`Excluir "${i.nome}" do estoque?`)) return
-    try { await api.delete(`/api/estoque/${i.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro') }
+    if (!await confirm(`Excluir "${i.nome}" do estoque?`)) return
+    try { await api.delete(`/api/estoque/${i.id}`); load(); toast.success('Item excluído') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -121,20 +125,20 @@ export default function Estoque() {
                 <tr><td colSpan={8} className="table-empty"><span className="empty-icon">📦</span>Nenhum item no estoque</td></tr>
               ) : filtered.map(i => (
                 <tr key={i.id} style={i.abaixo_minimo && i.estoque_minimo > 0 ? { background: '#fff5f5' } : {}}>
-                  <td><strong>{i.nome}</strong>{i.observacoes && <div style={{ fontSize: 12, color: '#6c757d' }}>{i.observacoes}</div>}</td>
-                  <td><span className={`badge ${categoriaBadge[i.categoria] || 'badge-gray'}`}>{categoriaLabel[i.categoria] || i.categoria}</span></td>
-                  <td style={{ fontWeight: 600, color: i.abaixo_minimo && i.estoque_minimo > 0 ? '#dc3545' : 'inherit' }}>
+                  <td data-label="Nome"><strong>{i.nome}</strong>{i.observacoes && <div style={{ fontSize: 12, color: '#6c757d' }}>{i.observacoes}</div>}</td>
+                  <td data-label="Categoria"><span className={`badge ${categoriaBadge[i.categoria] || 'badge-gray'}`}>{categoriaLabel[i.categoria] || i.categoria}</span></td>
+                  <td data-label="Quantidade" style={{ fontWeight: 600, color: i.abaixo_minimo && i.estoque_minimo > 0 ? '#dc3545' : 'inherit' }}>
                     {Number(i.quantidade || 0).toFixed(2)} {i.unidade}
                   </td>
-                  <td>{fmtMoeda(i.custo_unitario)}/{i.unidade}</td>
-                  <td style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(i.custo_total)}</td>
-                  <td>{i.estoque_minimo > 0 ? `${Number(i.estoque_minimo).toFixed(2)} ${i.unidade}` : '-'}</td>
-                  <td>
+                  <td data-label="Custo Unit.">{fmtMoeda(i.custo_unitario)}/{i.unidade}</td>
+                  <td data-label="Valor Total" style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(i.custo_total)}</td>
+                  <td data-label="Est. Mínimo">{i.estoque_minimo > 0 ? `${Number(i.estoque_minimo).toFixed(2)} ${i.unidade}` : '-'}</td>
+                  <td data-label="Situação">
                     {i.estoque_minimo > 0
                       ? <span className={`badge ${i.abaixo_minimo ? 'badge-red' : 'badge-green'}`}>{i.abaixo_minimo ? '⚠️ Baixo' : '✅ OK'}</span>
                       : <span className="badge badge-gray">-</span>}
                   </td>
-                  <td>
+                  <td data-label="">
                     <div className="actions">
                       {canWrite() && <button className="btn btn-outline btn-sm" style={{ color: '#198754', borderColor: '#198754' }} onClick={() => openEntrada(i)}>+ Entrada</button>}
                       {canEdit() && <button className="btn btn-outline btn-sm" onClick={() => openEdit(i)}>✏️</button>}

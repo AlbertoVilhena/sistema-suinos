@@ -3,17 +3,23 @@ import Layout from '../components/Layout'
 import Modal from '../components/Modal'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../components/ConfirmDialog'
 
 const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`
 const fmtMoeda2 = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 
 const faseBadge = { maternidade: 'badge-purple', creche: 'badge-blue', crescimento: 'badge-teal', terminacao: 'badge-yellow' }
+const plantelGrupoLabel = { matrizes: '🐷 Matrizes', reprodutores: '🐗 Reprodutores', geral: '🐖 Plantel Geral' }
 
+const today = new Date().toISOString().split('T')[0]
 const emptyForm = { nome: '', descricao: '', fase: '', ativa: true }
 const emptyIng = { nome: '', unidade: 'kg', estoque_kg: '', custo_por_kg: '' }
 
 export default function Formulacao() {
-  const { canEdit } = useAuth()
+  const { canEdit, canWrite } = useAuth()
+  const toast = useToast()
+  const confirm = useConfirm()
   const [tab, setTab] = useState('formulacoes')
 
   const [formulacoes, setFormulacoes] = useState([])
@@ -32,6 +38,14 @@ export default function Formulacao() {
   const [savingIng, setSavingIng] = useState(false)
 
   const [loading, setLoading] = useState(true)
+  const [lotes, setLotes] = useState([])
+
+  // Produção
+  const [showProducaoModal, setShowProducaoModal] = useState(false)
+  const [producaoTarget, setProducaoTarget] = useState(null)
+  const [producaoForm, setProducaoForm] = useState({ quantidade_kg: '', data: today, deduzir_estoque: true, observacoes: '' })
+  const [savingProducao, setSavingProducao] = useState(false)
+  const [producaoError, setProducaoError] = useState('')
 
   // Estoque import
   const [showImportModal, setShowImportModal] = useState(false)
@@ -40,8 +54,8 @@ export default function Formulacao() {
   const [importando, setImportando] = useState(false)
 
   const load = () => {
-    Promise.all([api.get('/api/formulacoes'), api.get('/api/ingredientes')])
-      .then(([rf, ri]) => { setFormulacoes(rf.data); setIngredientes(ri.data) })
+    Promise.all([api.get('/api/formulacoes'), api.get('/api/ingredientes'), api.get('/api/lotes')])
+      .then(([rf, ri, rl]) => { setFormulacoes(rf.data); setIngredientes(ri.data); setLotes(rl.data) })
       .finally(() => setLoading(false))
   }
 
@@ -81,9 +95,9 @@ export default function Formulacao() {
   }
 
   const handleDeleteForm = async (f) => {
-    if (!window.confirm(`Excluir formulacao "${f.nome}"?`)) return
-    try { await api.delete(`/api/formulacoes/${f.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro ao excluir') }
+    if (!await confirm(`Excluir formulação "${f.nome}"?`)) return
+    try { await api.delete(`/api/formulacoes/${f.id}`); load(); toast.success('Formulação excluída') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
 
   const openCreateIng = () => { setEditingIng(null); setIngForm(emptyIng); setIngError(''); setShowIngModal(true) }
@@ -107,9 +121,9 @@ export default function Formulacao() {
   }
 
   const handleDeleteIng = async (i) => {
-    if (!window.confirm(`Excluir ingrediente "${i.nome}"?`)) return
-    try { await api.delete(`/api/ingredientes/${i.id}`); load() }
-    catch (e) { alert(e.response?.data?.error || 'Erro ao excluir') }
+    if (!await confirm(`Excluir ingrediente "${i.nome}"?`)) return
+    try { await api.delete(`/api/ingredientes/${i.id}`); load(); toast.success('Ingrediente excluído') }
+    catch (e) { toast.error(e.response?.data?.error || 'Erro ao excluir') }
   }
 
   const openImportEstoque = async () => {
@@ -122,13 +136,13 @@ export default function Formulacao() {
       setSelectedImport(sel)
       setShowImportModal(true)
     } catch (e) {
-      alert('Erro ao carregar estoque')
+      toast.error('Erro ao carregar estoque')
     }
   }
 
   const handleImportConfirm = async () => {
     const toImport = estoqueRacao.filter(i => selectedImport[i.id])
-    if (toImport.length === 0) { alert('Selecione pelo menos um item'); return }
+    if (toImport.length === 0) { toast.warning('Selecione pelo menos um item'); return }
     setImportando(true)
     try {
       for (const item of toImport) {
@@ -150,12 +164,34 @@ export default function Formulacao() {
       }
       setShowImportModal(false)
       load()
-      alert(`${toImport.length} ingrediente(s) importado(s) do estoque!`)
+      toast.success(`${toImport.length} ingrediente(s) importado(s) do estoque!`)
     } catch (e) {
-      alert(e.response?.data?.error || 'Erro ao importar')
+      toast.error(e.response?.data?.error || 'Erro ao importar')
     } finally { setImportando(false) }
   }
 
+  const openProducao = (f) => {
+    setProducaoTarget(f)
+    setProducaoForm({ quantidade_kg: '', data: today, deduzir_estoque: true, observacoes: '' })
+    setProducaoError('')
+    setShowProducaoModal(true)
+  }
+
+  const handleProduzir = async () => {
+    setProducaoError('')
+    setSavingProducao(true)
+    try {
+      const payload = { ...producaoForm }
+      await api.post(`/api/formulacoes/${producaoTarget.id}/produzir`, payload)
+      setShowProducaoModal(false)
+      load()
+      toast.success(`✅ ${producaoForm.quantidade_kg} kg de "${producaoTarget.nome}" adicionados ao estoque de ração pronta`)
+    } catch (e) {
+      setProducaoError(e.response?.data?.error || 'Erro ao registrar produção')
+    } finally { setSavingProducao(false) }
+  }
+
+  const setPF = (k, v) => setProducaoForm(f => ({ ...f, [k]: v }))
   const setF = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const setI = (k, v) => setIngForm(f => ({ ...f, [k]: v }))
 
@@ -179,8 +215,10 @@ export default function Formulacao() {
       </div>
 
       <div className="tabs">
-        <div className={`tab ${tab === 'formulacoes' ? 'active' : ''}`} onClick={() => setTab('formulacoes')}>Formulacoes</div>
-        <div className={`tab ${tab === 'ingredientes' ? 'active' : ''}`} onClick={() => setTab('ingredientes')}>Ingredientes/Estoque</div>
+        <div className={`tab ${tab === 'formulacoes' ? 'active' : ''}`} onClick={() => setTab('formulacoes')}>Formulações</div>
+        {canEdit() && (
+          <div className={`tab ${tab === 'ingredientes' ? 'active' : ''}`} onClick={() => setTab('ingredientes')}>Ingredientes/Estoque</div>
+        )}
       </div>
 
       {tab === 'formulacoes' && (
@@ -216,39 +254,37 @@ export default function Formulacao() {
                     </div>
                   </div>
                 </div>
-                {canEdit() && (
-                  <div className="actions">
-                    <button className="btn btn-outline btn-sm" onClick={() => openEditForm(f)}>Editar</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDeleteForm(f)}>🗑️</button>
-                  </div>
-                )}
+                <div className="actions">
+                  <button className="btn btn-primary btn-sm" onClick={() => openProducao(f)}>🔄 Produzir</button>
+                  {canEdit() && <button className="btn btn-outline btn-sm" onClick={() => openEditForm(f)}>Editar</button>}
+                  {canEdit() && <button className="btn btn-danger btn-sm" onClick={() => handleDeleteForm(f)}>🗑️</button>}
+                </div>
               </div>
               {f.itens.length > 0 && (
-                <div style={{ marginTop: 12, borderTop: '1px solid #e9ecef', paddingTop: 12 }}>
-                  <table style={{ width: '100%', fontSize: 13 }}>
-                    <thead><tr>
-                      <th style={{ textAlign: 'left', padding: '4px 8px', color: '#6c757d' }}>Ingrediente</th>
-                      <th style={{ textAlign: 'right', padding: '4px 8px', color: '#6c757d' }}>%</th>
-                      <th style={{ textAlign: 'right', padding: '4px 8px', color: '#6c757d' }}>Custo/kg</th>
-                      <th style={{ textAlign: 'right', padding: '4px 8px', color: '#6c757d' }}>Custo proporcional</th>
-                      <th style={{ textAlign: 'right', padding: '4px 8px', color: '#6c757d' }}>Estoque</th>
-                    </tr></thead>
-                    <tbody>
-                      {f.itens.map(item => (
-                        <tr key={item.id}>
-                          <td style={{ padding: '4px 8px' }}>{item.ingrediente_nome}</td>
-                          <td style={{ textAlign: 'right', padding: '4px 8px' }}>{item.percentagem}%</td>
-                          <td style={{ textAlign: 'right', padding: '4px 8px' }}>{fmtMoeda2(item.custo_unitario)}</td>
-                          <td style={{ textAlign: 'right', padding: '4px 8px', color: '#198754' }}>{fmtMoeda(item.custo_proporcional)}</td>
-                          <td style={{ textAlign: 'right', padding: '4px 8px' }}>
-                            <span className={`badge ${item.estoque_disponivel > 0 ? 'badge-green' : 'badge-red'}`}>
-                              {item.estoque_disponivel} {item.ingrediente_unidade}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div style={{ marginTop: 12, borderTop: '1px solid #e9ecef', paddingTop: 8 }}>
+                  {/* Cabeçalho */}
+                  <div style={{ display: 'flex', gap: 8, padding: '4px 0 6px', borderBottom: '1px solid #f0f0f0' }}>
+                    <div style={{ flex: 1, fontSize: 10, fontWeight: 600, color: '#6c757d', textTransform: 'uppercase' }}>Ingrediente</div>
+                    <div style={{ width: 36, fontSize: 10, fontWeight: 600, color: '#6c757d', textAlign: 'right' }}>%</div>
+                    <div style={{ width: 72, fontSize: 10, fontWeight: 600, color: '#6c757d', textAlign: 'right' }}>Custo/kg</div>
+                    <div style={{ width: 72, fontSize: 10, fontWeight: 600, color: '#6c757d', textAlign: 'right' }}>Proporcional</div>
+                    <div style={{ width: 60, fontSize: 10, fontWeight: 600, color: '#6c757d', textAlign: 'right' }}>Estoque</div>
+                  </div>
+                  {/* Linhas */}
+                  {f.itens.map(item => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f8f9fa' }}>
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={item.ingrediente_nome}>{item.ingrediente_nome}</div>
+                      <div style={{ width: 36, fontSize: 13, textAlign: 'right', flexShrink: 0, color: '#495057' }}>{item.percentagem}%</div>
+                      <div style={{ width: 72, fontSize: 12, textAlign: 'right', flexShrink: 0 }}>{fmtMoeda2(item.custo_unitario)}</div>
+                      <div style={{ width: 72, fontSize: 12, textAlign: 'right', flexShrink: 0, color: '#198754', fontWeight: 600 }}>{fmtMoeda(item.custo_proporcional)}</div>
+                      <div style={{ width: 60, textAlign: 'right', flexShrink: 0 }}>
+                        <span className={`badge ${item.estoque_disponivel > 0 ? 'badge-green' : 'badge-red'}`} style={{ fontSize: 11 }}>
+                          {Number(item.estoque_disponivel).toFixed(0)}{item.ingrediente_unidade}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -378,6 +414,117 @@ export default function Formulacao() {
         </Modal>
       )}
 
+      {showProducaoModal && producaoTarget && (() => {
+        // Calcula custo atual e variações por ingrediente
+        // custo_unitario agora já é o preço atual (backend atualizado)
+        // custo_unitario_salvo é o snapshot histórico
+        const itensComPrecos = producaoTarget.itens.map(item => {
+          const ing = ingredientes.find(i => i.id === item.ingrediente_id)
+          const custoAtual = ing?.custo_por_kg ?? item.custo_unitario ?? 0
+          const custoSalvo = item.custo_unitario_salvo ?? item.custo_unitario ?? 0
+          const diff = custoAtual - custoSalvo
+          const propAtual = (item.percentagem / 100) * custoAtual
+          const qtdNecessaria = producaoForm.quantidade_kg ? (parseFloat(producaoForm.quantidade_kg) * item.percentagem / 100) : null
+          return { ...item, custoAtual, custoSalvo, diff, propAtual, qtdNecessaria, estoqueAtual: ing?.estoque_kg || 0, semEstoque: qtdNecessaria && (ing?.estoque_kg || 0) < qtdNecessaria }
+        })
+        const custoPorKgAtual = itensComPrecos.reduce((s, i) => s + i.propAtual, 0)
+        const custoPorKgSalvo = producaoTarget.custo_por_kg
+        const diffTotal = custoPorKgAtual - custoPorKgSalvo
+        const custoTotal = producaoForm.quantidade_kg ? parseFloat(producaoForm.quantidade_kg) * custoPorKgAtual : 0
+        const algumSemEstoque = itensComPrecos.some(i => i.semEstoque)
+
+        return (
+          <Modal
+            title={`🔄 Produzir: ${producaoTarget.nome}`}
+            onClose={() => setShowProducaoModal(false)}
+            onSave={handleProduzir}
+            saving={savingProducao}
+            saveLabel="✅ Registrar Produção"
+          >
+            {producaoError && <div className="error-msg">{producaoError}</div>}
+
+            {/* Comparação de preços */}
+            <div style={{ marginBottom: 16, padding: '10px 14px', background: '#f8f9fa', borderRadius: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#6c757d', marginBottom: 8, textTransform: 'uppercase' }}>
+                Preços atualizados dos ingredientes
+              </div>
+              {itensComPrecos.map(item => (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #f0f0f0', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 100, fontSize: 13, fontWeight: 500 }}>{item.ingrediente_nome}</div>
+                  <div style={{ fontSize: 12, color: '#6c757d', flexShrink: 0 }}>{item.percentagem}%</div>
+                  <div style={{ fontSize: 12, flexShrink: 0 }}>
+                    {item.diff > 0.0001 && <span style={{ color: '#dc3545', fontWeight: 600 }}>▲ {fmtMoeda2(item.custoAtual)}</span>}
+                    {item.diff < -0.0001 && <span style={{ color: '#198754', fontWeight: 600 }}>▼ {fmtMoeda2(item.custoAtual)}</span>}
+                    {Math.abs(item.diff) <= 0.0001 && <span style={{ color: '#495057' }}>{fmtMoeda2(item.custoAtual)}</span>}
+                    {Math.abs(item.diff) > 0.0001 && <span style={{ color: '#6c757d', fontSize: 11, marginLeft: 4 }}>(era {fmtMoeda2(item.custoSalvo)})</span>}
+                  </div>
+                  {item.qtdNecessaria && (
+                    <div style={{ fontSize: 11, flexShrink: 0 }}>
+                      <span className={`badge ${item.semEstoque ? 'badge-red' : 'badge-green'}`}>
+                        {item.qtdNecessaria.toFixed(1)}kg / {item.estoqueAtual.toFixed(1)}kg est.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div style={{ marginTop: 10, display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                <div>
+                  <span style={{ fontSize: 12, color: '#6c757d' }}>Custo/kg atual: </span>
+                  <strong style={{ color: '#198754' }}>{fmtMoeda(custoPorKgAtual)}</strong>
+                  {Math.abs(diffTotal) > 0.0001 && (
+                    <span style={{ fontSize: 11, color: diffTotal > 0 ? '#dc3545' : '#198754', marginLeft: 6 }}>
+                      ({diffTotal > 0 ? '+' : ''}{fmtMoeda(diffTotal)} vs salvo)
+                    </span>
+                  )}
+                </div>
+                {custoTotal > 0 && (
+                  <div>
+                    <span style={{ fontSize: 12, color: '#6c757d' }}>Custo total: </span>
+                    <strong style={{ color: '#0d6efd' }}>{fmtMoeda2(custoTotal)}</strong>
+                  </div>
+                )}
+              </div>
+              {algumSemEstoque && producaoForm.deduzir_estoque && (
+                <div style={{ marginTop: 8, padding: '6px 10px', background: '#fff3cd', borderRadius: 6, fontSize: 12, color: '#664d03' }}>
+                  ⚠️ Estoque insuficiente em alguns ingredientes. A produção será registrada mesmo assim, mas o estoque pode ficar negativo.
+                </div>
+              )}
+            </div>
+
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Data *</label>
+                <input type="date" value={producaoForm.data} onChange={e => setPF('data', e.target.value)} />
+              </div>
+
+              <div className="form-group">
+                <label>Quantidade a produzir (kg) *</label>
+                <input type="number" step="0.1" min="0.1" value={producaoForm.quantidade_kg}
+                  onChange={e => setPF('quantidade_kg', e.target.value)} placeholder="Ex: 500" />
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={producaoForm.deduzir_estoque}
+                    onChange={e => setPF('deduzir_estoque', e.target.checked)}
+                    style={{ width: 16, height: 16 }} />
+                  Deduzir ingredientes do estoque
+                </label>
+                <div style={{ fontSize: 11, color: '#6c757d', marginTop: 4 }}>
+                  Subtrai as quantidades proporcionais de cada ingrediente
+                </div>
+              </div>
+
+              <div className="form-group span-2">
+                <label>Observações</label>
+                <input value={producaoForm.observacoes} onChange={e => setPF('observacoes', e.target.value)}
+                  placeholder={`Produção via formulação: ${producaoTarget.nome}`} />
+              </div>
+            </div>
+          </Modal>
+        )
+      })()}
+
       {showImportModal && (
         <Modal title="Importar Ingredientes do Estoque (Racao)"
           onClose={() => setShowImportModal(false)}
@@ -398,18 +545,23 @@ export default function Formulacao() {
               {estoqueRacao.map(item => {
                 const existing = ingredientes.find(ing => ing.nome.toLowerCase() === item.nome.toLowerCase())
                 return (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                  <label key={item.id} htmlFor={`imp-${item.id}`}
+                    style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 0', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', width: '100%' }}>
                     <input type="checkbox" id={`imp-${item.id}`}
                       checked={!!selectedImport[item.id]}
-                      onChange={e => setSelectedImport(s => ({ ...s, [item.id]: e.target.checked }))} />
-                    <label htmlFor={`imp-${item.id}`} style={{ flex: 1, cursor: 'pointer' }}>
-                      <strong>{item.nome}</strong>
-                      <span style={{ color: '#6c757d', fontSize: 12, marginLeft: 8 }}>
-                        {Number(item.quantidade).toFixed(2)} {item.unidade} — R$ {item.custo_unitario}/{item.unidade}
-                      </span>
-                      {existing && <span className="badge badge-blue" style={{ marginLeft: 8, fontSize: 11 }}>ja existe — sera atualizado</span>}
-                    </label>
-                  </div>
+                      onChange={e => setSelectedImport(s => ({ ...s, [item.id]: e.target.checked }))}
+                      style={{ marginTop: 2, flexShrink: 0, width: 18, height: 18 }} />
+                    <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                      <div style={{ fontWeight: 600, fontSize: 14, wordBreak: 'break-word' }}>{item.nome}</div>
+                      <div style={{ color: '#6c757d', fontSize: 12, marginTop: 3 }}>
+                        📦 {Number(item.quantidade).toFixed(2)} {item.unidade}
+                      </div>
+                      <div style={{ color: '#495057', fontSize: 12 }}>
+                        💰 R$ {Number(item.custo_unitario).toFixed(4)}/{item.unidade}
+                      </div>
+                      {existing && <div style={{ marginTop: 4 }}><span className="badge badge-blue" style={{ fontSize: 11 }}>já existe — será atualizado</span></div>}
+                    </div>
+                  </label>
                 )
               })}
             </div>
