@@ -334,11 +334,12 @@ export default function Relatorios() {
     </div>` : ''}
 
   <!-- Assinaturas -->
-  <div style="margin-top:32px;display:flex;gap:24px;padding-top:4px">
+  <div style="margin-top:48px;display:flex;gap:32px;padding-top:4px">
     ${['Responsável Técnico / Veterinário', 'Gerente / Responsável', 'Data de Conferência'].map(label => `
       <div style="flex:1">
-        <div style="border-top:1px solid #adb5bd;margin-bottom:6px"></div>
-        <div style="font-size:10px;color:#6c757d;text-align:center">${label}</div>
+        <div style="height:48px"></div>
+        <div style="border-top:1px solid #6c757d;margin-bottom:8px"></div>
+        <div style="font-size:11px;color:#495057;text-align:center">${label}</div>
       </div>`).join('')}
   </div>
 
@@ -610,7 +611,12 @@ export default function Relatorios() {
                         <tr><td colSpan={13} className="table-empty">Nenhum lote com dados de pesagem</td></tr>
                       ) : relGmd.lotes.map(l => {
                         const st = GMD_STATUS[l.status_gmd] || GMD_STATUS.sem_dados
-                        const pctCor = l.pct_ideal >= 100 ? '#198754' : l.pct_ideal >= 70 ? '#856404' : '#dc3545'
+                        // Quando aguardando, usar gmd_total como referência visual (sem afetar status/alertas)
+                        const gmdExibir = l.gmd_fase ?? l.gmd_total
+                        const isGmdTotal = l.gmd_fase == null && l.gmd_total != null
+                        const pctExibir = l.pct_ideal ?? (gmdExibir != null && l.ref_ideal != null ? +((gmdExibir / l.ref_ideal) * 100).toFixed(1) : null)
+                        const pctCor = pctExibir >= 100 ? '#198754' : pctExibir >= 70 ? '#856404' : '#dc3545'
+                        const gmdCor = l.status_gmd === 'critico' ? '#dc3545' : l.status_gmd === 'alerta' ? '#856404' : isGmdTotal ? '#6c757d' : '#198754'
                         const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
                         return (
                           <tr key={l.lote_id} style={{ background: l.status_gmd === 'critico' ? '#fff5f5' : l.status_gmd === 'alerta' ? '#fffbf0' : 'inherit' }}>
@@ -635,9 +641,10 @@ export default function Relatorios() {
                             </td>
                             <td style={{ color: '#6c757d' }}>{l.peso_ref_fase > 0 ? `${l.peso_ref_fase} kg` : '-'}</td>
                             <td style={{ fontWeight: 600 }}>{l.peso_atual} kg</td>
-                            <td style={{ fontWeight: 700, fontSize: 13, color: l.status_gmd === 'critico' ? '#dc3545' : l.status_gmd === 'alerta' ? '#856404' : '#198754' }}>
-                              {l.gmd_fase != null ? `${l.gmd_fase.toFixed(3)} kg/d` : '—'}
-                              {l.n_pesagens_fase != null && l.n_pesagens_fase < 2 && l.gmd_fase != null && (
+                            <td style={{ fontWeight: 700, fontSize: 13, color: gmdCor }}>
+                              {gmdExibir != null ? `${gmdExibir.toFixed(3)} kg/d` : '—'}
+                              {isGmdTotal && <div style={{ fontSize: 9, color: '#6c757d', fontWeight: 400 }}>geral</div>}
+                              {!isGmdTotal && l.n_pesagens_fase != null && l.n_pesagens_fase < 2 && l.gmd_fase != null && (
                                 <div style={{ fontSize: 9, color: '#6c757d', fontWeight: 400 }}>1 pesagem</div>
                               )}
                             </td>
@@ -647,12 +654,12 @@ export default function Relatorios() {
                             <td style={{ color: '#6c757d' }}>{l.ref_min != null ? `${l.ref_min} kg/d` : '-'}</td>
                             <td style={{ color: '#6c757d' }}>{l.ref_ideal != null ? `${l.ref_ideal} kg/d` : '-'}</td>
                             <td>
-                              {l.pct_ideal != null ? (
+                              {pctExibir != null ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                   <div style={{ flex: 1, height: 6, background: '#e9ecef', borderRadius: 3, minWidth: 40 }}>
-                                    <div style={{ height: '100%', borderRadius: 3, background: pctCor, width: `${Math.min(l.pct_ideal, 100)}%` }} />
+                                    <div style={{ height: '100%', borderRadius: 3, background: isGmdTotal ? '#adb5bd' : pctCor, width: `${Math.min(pctExibir, 100)}%` }} />
                                   </div>
-                                  <span style={{ fontWeight: 600, color: pctCor, fontSize: 11 }}>{l.pct_ideal}%</span>
+                                  <span style={{ fontWeight: 600, color: isGmdTotal ? '#6c757d' : pctCor, fontSize: 11 }}>{pctExibir}%</span>
                                 </div>
                               ) : '-'}
                             </td>
