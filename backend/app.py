@@ -464,6 +464,40 @@ class Estoque(db.Model):
             'atualizado_em': self.atualizado_em.isoformat() if self.atualizado_em else None
         }
 
+class ProducaoRacao(db.Model):
+    __tablename__ = 'producao_racao'
+    id = db.Column(db.Integer, primary_key=True)
+    formulacao_id = db.Column(db.Integer, db.ForeignKey('formulacoes.id'), nullable=True)
+    formulacao_nome = db.Column(db.String(100))
+    quantidade_kg = db.Column(db.Float, nullable=False)
+    quantidade_usada_kg = db.Column(db.Float, default=0)
+    data = db.Column(db.Date, nullable=False)
+    custo_por_kg = db.Column(db.Float)
+    observacoes = db.Column(db.Text)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    formulacao_ref = db.relationship('Formulacao', foreign_keys=[formulacao_id], lazy='select')
+
+    @property
+    def quantidade_disponivel(self):
+        return round(max(0, (self.quantidade_kg or 0) - (self.quantidade_usada_kg or 0)), 3)
+
+    def to_dict(self):
+        nome = self.formulacao_nome or (self.formulacao_ref.nome if self.formulacao_ref else 'Ração')
+        return {
+            'id': self.id,
+            'formulacao_id': self.formulacao_id,
+            'formulacao_nome': nome,
+            'quantidade_kg': self.quantidade_kg,
+            'quantidade_usada_kg': self.quantidade_usada_kg or 0,
+            'quantidade_disponivel': self.quantidade_disponivel,
+            'data': self.data.isoformat() if self.data else None,
+            'custo_por_kg': self.custo_por_kg,
+            'custo_total': round((self.quantidade_kg or 0) * (self.custo_por_kg or 0), 2),
+            'observacoes': self.observacoes,
+            'criado_em': self.criado_em.isoformat()
+        }
+
+
 class PlanoVacinacao(db.Model):
     __tablename__ = 'planos_vacinacao'
     id = db.Column(db.Integer, primary_key=True)
@@ -1427,6 +1461,161 @@ def delete_alimentacao(aid):
     return jsonify({'message': 'Registro excluído com sucesso'})
 
 
+KG_POR_ANIMAL_DIA = {
+    'maternidade': 2.5,
+    'creche': 0.8,
+    'crescimento': 1.8,
+    'terminacao': 2.8,
+    'matrizes': 2.5,
+    'reprodutores': 3.0,
+    'geral': 2.5,
+}
+
+
+@app.route('/api/alimentacao/diaria', methods=['GET'])
+@jwt_required()
+def get_alimentacao_diaria():
+    data_str = request.args.get('data', date.today().isoformat())
+    try:
+        data_ref = datetime.strptime(data_str, '%Y-%m-%d').date()
+    except Exception:
+        data_ref = date.today()
+
+    lotes = Lote.query.filter_by(status='ativo').order_by(Lote.numero).all()
+
+    alims_dia = Alimentacao.query.filter_by(data=data_ref).all()
+    alims_por_lote = {}
+    alims_por_plantel = {}
+    for a in alims_dia:
+        if a.lote_id:
+            alims_por_lote.setdefault(a.lote_id, []).append(a)
+        elif a.plantel_grupo:
+            alims_por_plantel.setdefault(a.plantel_grupo, []).append(a)
+
+    formulacoes = Formulacao.query.filter_by(ativa=True).all()
+
+    destinos = []
+
+    for lote in lotes:
+        qtd = lote.quantidade_atual or 0
+        fase = (lote.fase or '').lower()
+        kg_dia = KG_POR_ANIMAL_DIA.get(fase, 2.0)
+        kg_sugerido = round(qtd * kg_dia, 1)
+
+        alims_hoje = alims_por_lote.get(lote.id, [])
+        total_hoje = round(sum(a.quantidade_kg for a in alims_hoje), 2)
+
+        form_sugerida = next((f for f in formulacoes if f.fase == fase), None) or \
+                        (formulacoes[0] if formulacoes else None)
+
+        destinos.append({
+            'tipo': 'lote',
+            'id': lote.id,
+            'nome': lote.numero,
+            'fase': lote.fase,
+            'quantidade_animais': qtd,
+            'kg_sugerido': kg_sugerido,
+            'kg_dia_referencia': kg_dia,
+            'alimentado_hoje': len(alims_hoje) > 0,
+            'total_kg_hoje': total_hoje,
+            'registros_hoje': [a.to_dict() for a in alims_hoje],
+            'formulacao_sugerida_id': form_sugerida.id if form_sugerida else None,
+            'formulacao_sugerida_nome': form_sugerida.nome if form_sugerida else None,
+        })
+
+    qtd_matrizes = Plantel.query.filter_by(tipo='matriz', status='ativo').count()
+    qtd_reprodutores = Plantel.query.filter_by(tipo='reprodutor', status='ativo').count()
+
+    for grupo_key, grupo_label, qtd in [
+        ('matrizes', '🐷 Matrizes', qtd_matrizes),
+        ('reprodutores', '🐗 Reprodutores', qtd_reprodutores),
+    ]:
+        if qtd == 0:
+            continue
+        kg_dia = KG_POR_ANIMAL_DIA.get(grupo_key, 2.5)
+        kg_sugerido = round(qtd * kg_dia, 1)
+        alims_hoje = alims_por_plantel.get(grupo_key, [])
+        total_hoje = round(sum(a.quantidade_kg for a in alims_hoje), 2)
+        destinos.append({
+            'tipo': 'plantel',
+            'id': grupo_key,
+            'nome': grupo_label,
+            'fase': grupo_key,
+            'quantidade_animais': qtd,
+            'kg_sugerido': kg_sugerido,
+            'kg_dia_referencia': kg_dia,
+            'alimentado_hoje': len(alims_hoje) > 0,
+            'total_kg_hoje': total_hoje,
+            'registros_hoje': [a.to_dict() for a in alims_hoje],
+            'formulacao_sugerida_id': None,
+            'formulacao_sugerida_nome': None,
+        })
+
+    return jsonify({
+        'data': data_ref.isoformat(),
+        'formulacoes': [{'id': f.id, 'nome': f.nome, 'fase': f.fase, 'custo_por_kg': f.custo_por_kg} for f in formulacoes],
+        'destinos': destinos,
+        'total': len(destinos),
+        'alimentados': sum(1 for d in destinos if d['alimentado_hoje']),
+        'pendentes': sum(1 for d in destinos if not d['alimentado_hoje']),
+    })
+
+
+@app.route('/api/alimentacao/bulk', methods=['POST'])
+@jwt_required()
+def create_alimentacao_bulk():
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+
+    data = request.get_json()
+    registros = data.get('registros', [])
+    if not registros:
+        return jsonify({'error': 'Nenhum registro informado'}), 400
+
+    criados = []
+    for r in registros:
+        quantidade_kg = to_float(r.get('quantidade_kg'))
+        if not quantidade_kg or quantidade_kg <= 0:
+            continue
+        if not r.get('lote_id') and not r.get('plantel_grupo'):
+            continue
+        data_str = r.get('data', date.today().isoformat())
+
+        formulacao_id = to_int(r.get('formulacao_id'))
+        custo_unitario = to_float(r.get('custo_unitario'))
+        if formulacao_id and custo_unitario is None:
+            f = Formulacao.query.get(formulacao_id)
+            if f:
+                custo_unitario = f.calcular_custo_por_kg()
+
+        alim = Alimentacao(
+            lote_id=to_int(r.get('lote_id')),
+            plantel_grupo=r.get('plantel_grupo') or None,
+            formulacao_id=formulacao_id,
+            data=datetime.strptime(data_str, '%Y-%m-%d').date(),
+            racao_tipo=r.get('racao_tipo'),
+            quantidade_kg=quantidade_kg,
+            custo_unitario=custo_unitario,
+            observacoes=r.get('observacoes')
+        )
+        db.session.add(alim)
+        criados.append(alim)
+
+    if not criados:
+        return jsonify({'error': 'Nenhum registro válido para salvar'}), 400
+
+    db.session.commit()
+    return jsonify({'criados': len(criados), 'registros': [a.to_dict() for a in criados]}), 201
+
+
+@app.route('/api/producao-racao', methods=['GET'])
+@jwt_required()
+def get_producao_racao():
+    producoes = ProducaoRacao.query.order_by(ProducaoRacao.data.desc()).limit(100).all()
+    return jsonify([p.to_dict() for p in producoes])
+
+
 def get_fase_reprodutiva(brinco):
     """Determina a fase reprodutiva atual de uma matriz pelo brinco."""
     today = date.today()
@@ -1779,8 +1968,6 @@ def produzir_formulacao(fid):
         return jsonify({'error': 'Quantidade inválida'}), 400
     if not data.get('data'):
         return jsonify({'error': 'Data é obrigatória'}), 400
-    if not data.get('lote_id') and not data.get('plantel_grupo'):
-        return jsonify({'error': 'Selecione um lote ou grupo do plantel'}), 400
 
     # Calcula custo/kg com preços atuais dos ingredientes
     custo_atual_por_kg = 0
@@ -1789,18 +1976,17 @@ def produzir_formulacao(fid):
         if ing:
             custo_atual_por_kg += (item.percentagem / 100) * (ing.custo_por_kg or 0)
 
-    # Cria registro de Alimentação
-    alim = Alimentacao(
-        lote_id=to_int(data.get('lote_id')),
-        plantel_grupo=data.get('plantel_grupo') or None,
+    # Cria registro de Produção (estoque de ração pronta)
+    prod = ProducaoRacao(
         formulacao_id=fid,
-        data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
-        racao_tipo=formulacao.nome,
+        formulacao_nome=formulacao.nome,
         quantidade_kg=quantidade_kg,
-        custo_unitario=round(custo_atual_por_kg, 4),
-        observacoes=data.get('observacoes') or f'Produção via formulação: {formulacao.nome}'
+        quantidade_usada_kg=0,
+        data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
+        custo_por_kg=round(custo_atual_por_kg, 4),
+        observacoes=data.get('observacoes') or f'Produção: {formulacao.nome}'
     )
-    db.session.add(alim)
+    db.session.add(prod)
 
     # Deduz estoque de ingredientes se solicitado
     if data.get('deduzir_estoque'):
@@ -1811,7 +1997,7 @@ def produzir_formulacao(fid):
                 ing.estoque_kg = max(0, (ing.estoque_kg or 0) - qty_necessaria)
 
     db.session.commit()
-    return jsonify(alim.to_dict()), 201
+    return jsonify(prod.to_dict()), 201
 
 
 # ============== DASHBOARD ==============
@@ -1863,6 +2049,13 @@ def get_dashboard():
 
     lotes_recentes = Lote.query.order_by(Lote.criado_em.desc()).limit(5).all()
 
+    # Lotes ativos sem alimentação hoje
+    lotes_ativos_ids = {l.id for l in Lote.query.filter_by(status='ativo').with_entities(Lote.id).all()}
+    alims_hoje_ids = {a.lote_id for a in Alimentacao.query.filter(
+        Alimentacao.data == hoje, Alimentacao.lote_id.isnot(None)
+    ).with_entities(Alimentacao.lote_id).all()}
+    lotes_sem_alimentacao_hoje = len(lotes_ativos_ids - alims_hoje_ids)
+
     return jsonify({
         'total_lotes_ativos': total_lotes_ativos,
         'total_animais': total_animais,
@@ -1874,7 +2067,8 @@ def get_dashboard():
         'saldo': round(saldo, 2),
         'partos_previstos_30dias': partos_previstos,
         'custo_racao_30dias': round(custo_racao_30d, 2),
-        'lotes_recentes': [l.to_dict() for l in lotes_recentes]
+        'lotes_recentes': [l.to_dict() for l in lotes_recentes],
+        'lotes_sem_alimentacao_hoje': lotes_sem_alimentacao_hoje,
     })
 
 
