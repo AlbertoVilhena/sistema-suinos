@@ -197,28 +197,9 @@ export default function Relatorios() {
       const refMins = relGmd.referencias[l.fase?.toLowerCase()]
       const minStr = refMins ? `${refMins.min}` : '—'
 
-      const histRows = (l.historico_pesagens || []).map(p => {
-        const ref = relGmd.referencias[l.fase?.toLowerCase()]
-        const gOk = p.gmd_intervalo != null && ref ? p.gmd_intervalo >= ref.min : null
-        const gCor = gOk === false ? '#dc3545' : gOk === true ? '#198754' : '#666'
-        return `<tr style="background:#f5f7fa">
-          <td style="padding:4px 10px 4px 28px;border-bottom:1px solid #eee;font-size:10px;color:#555">
-            ${p.fase_atual ? '⚡' : '◦'} ${fmtD(p.data)}
-          </td>
-          <td colspan="2" style="padding:4px 10px;border-bottom:1px solid #eee;font-size:10px;color:#555"></td>
-          <td style="padding:4px 10px;border-bottom:1px solid #eee;font-size:10px;color:#555;text-align:right"></td>
-          <td style="padding:4px 10px;border-bottom:1px solid #eee;font-size:10px;font-weight:600;color:#212529;text-align:right">${Number(p.peso_medio).toFixed(2)} kg</td>
-          <td style="padding:4px 10px;border-bottom:1px solid #eee;font-size:10px;color:${gCor};text-align:center;font-weight:600">
-            ${p.gmd_intervalo != null ? `${p.gmd_intervalo.toFixed(3)} kg/d` : '—'}
-            ${p.dias_intervalo ? `<span style="color:#888;font-weight:400"> (${p.dias_intervalo}d)</span>` : ''}
-          </td>
-          <td colspan="4" style="padding:4px 10px;border-bottom:1px solid #eee"></td>
-        </tr>`
-      }).join('')
-
       const infoRow = `
         <tr style="background:${rowBg}">
-          <td colspan="${NCOLS}" style="padding:3px 10px 6px 14px;border-bottom:1px solid #e0e0e0;font-size:10px;color:#6c757d">
+          <td colspan="${NCOLS}" style="padding:3px 10px 7px 14px;border-bottom:1px solid #e0e0e0;font-size:10px;color:#6c757d">
             Data de Entrada: <strong>${fmtD(l.data_entrada)}</strong>
             ${l.dias_producao != null ? ` &nbsp;·&nbsp; Dias total: <strong>${l.dias_producao}d</strong>` : ''}
           </td>
@@ -243,8 +224,7 @@ export default function Relatorios() {
           <td style="padding:9px 10px 6px 10px;border-bottom:none;text-align:center;vertical-align:middle">${pct}</td>
           <td style="padding:9px 10px 6px 10px;border-bottom:none;text-align:center;vertical-align:middle;font-weight:700;font-size:11px;color:${cor}">${LABEL[l.status_gmd] || '—'}</td>
         </tr>
-        ${infoRow}
-        ${histRows}`
+        ${infoRow}`
     }).join('')
 
     const alertasHTML = relGmd.lotes
