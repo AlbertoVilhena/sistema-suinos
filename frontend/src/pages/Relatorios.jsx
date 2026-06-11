@@ -146,7 +146,13 @@ export default function Relatorios() {
     ...(relFin.custos_operacionais.custo_sanidade > 0 ? [{ categoria: '💉 Sanidade', total: relFin.custos_operacionais.custo_sanidade }] : []),
     ...((relFin.custos_operacionais.custo_aquisicao_total ?? relFin.custos_operacionais.custo_aquisicao_animais ?? 0) > 0 ? [{ categoria: '🐖 Aquisição', total: relFin.custos_operacionais.custo_aquisicao_total ?? relFin.custos_operacionais.custo_aquisicao_animais }] : []),
   ] : []
-  const desp = [...despFin, ...despOp]
+  // Mescla entradas de ração (financeiro + operacional) numa única barra
+  const isRacao = s => /ra[çc]ao|ração/i.test(s || '')
+  const racaoTotal = [...despFin, ...despOp].filter(d => isRacao(d.categoria)).reduce((s, d) => s + (d.total || 0), 0)
+  const desp = [
+    ...(racaoTotal > 0 ? [{ categoria: '🌽 Ração', total: racaoTotal }] : []),
+    ...[...despFin, ...despOp].filter(d => !isRacao(d.categoria)),
+  ]
   const rec = relFin?.receitas_por_categoria || []
   const maxDesp = Math.max(...desp.map(d => d.total), 1)
   const maxRec = Math.max(...rec.map(r => r.total), 1)
@@ -464,11 +470,11 @@ export default function Relatorios() {
         <div>
           {/* Saldo em destaque */}
           <div className="rel-fin-saldo" style={{ borderColor: relFin.saldo >= 0 ? '#198754' : '#dc3545' }}>
-            <div className="rel-fin-saldo-label">Saldo da Operação</div>
-            <div className="rel-fin-saldo-value" style={{ color: relFin.saldo >= 0 ? '#198754' : '#dc3545' }}>
+            <div className="rel-fin-saldo-label" style={{ fontSize: 11 }}>Saldo da Operação</div>
+            <div className="rel-fin-saldo-value" style={{ color: relFin.saldo >= 0 ? '#198754' : '#dc3545', fontSize: 26 }}>
               {relFin.saldo >= 0 ? '✅' : '⚠️'} {fmtMoeda(relFin.saldo)}
             </div>
-            <div style={{ fontSize: 12, color: '#6c757d', marginTop: 8, display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ fontSize: 11, color: '#6c757d', marginTop: 6, display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
               <span>📈 Receitas: <strong style={{ color: '#198754' }}>{fmtMoeda(relFin.total_receitas)}</strong></span>
               <span>📉 Despesas: <strong style={{ color: '#dc3545' }}>{fmtMoeda(relFin.total_custos ?? (relFin.total_despesas + relFin.total_operacional))}</strong></span>
             </div>
@@ -478,14 +484,14 @@ export default function Relatorios() {
           <div className="rel-fin-grid">
             <div className="stat-card">
               <div className="stat-icon green">📈</div>
-              <div><div className="stat-value" style={{ fontSize: 17 }}>{fmtMoeda(relFin.total_receitas)}</div><div className="stat-label">Total Receitas</div></div>
+              <div><div className="stat-value" style={{ fontSize: 15 }}>{fmtMoeda(relFin.total_receitas)}</div><div className="stat-label">Total Receitas</div></div>
             </div>
             <div className="stat-card">
               <div className="stat-icon red">📉</div>
               <div>
-                <div className="stat-value" style={{ fontSize: 17 }}>{fmtMoeda(relFin.total_custos ?? (relFin.total_despesas + relFin.total_operacional))}</div>
+                <div className="stat-value" style={{ fontSize: 15 }}>{fmtMoeda(relFin.total_custos ?? (relFin.total_despesas + relFin.total_operacional))}</div>
                 <div className="stat-label">Total Despesas</div>
-                <div style={{ fontSize: 11, color: '#6c757d', marginTop: 2 }}>
+                <div style={{ fontSize: 10, color: '#6c757d', marginTop: 2 }}>
                   Financeiro + Operacional
                 </div>
               </div>
@@ -530,19 +536,19 @@ export default function Relatorios() {
 
           {/* Custos operacionais */}
           {relFin.custos_operacionais && (
-            <div className="card" style={{ marginTop: 16 }}>
-              <div className="card-title">⚙️ Custos Operacionais</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 12 }}>
+            <div className="card" style={{ marginTop: 14 }}>
+              <div className="card-title" style={{ fontSize: 13 }}>⚙️ Custos Operacionais</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginTop: 10 }}>
                 {[
-                  { label: '🌽 Ração', value: relFin.custos_operacionais.custo_racao },
-                  { label: '💉 Sanidade', value: relFin.custos_operacionais.custo_sanidade },
-                  { label: '🐷 Aquisição Lotes', value: relFin.custos_operacionais.custo_aquisicao_animais },
-                  { label: '🐖 Aquisição Plantel', value: relFin.custos_operacionais.custo_aquisicao_plantel ?? 0 },
-                  { label: '⚙️ Total Operacional', value: relFin.custos_operacionais.total_operacional, bold: true },
+                  { label: '🌽 Ração',            value: relFin.custos_operacionais.custo_racao },
+                  { label: '💉 Sanidade',          value: relFin.custos_operacionais.custo_sanidade },
+                  { label: '🐷 Aquis. Lotes',      value: relFin.custos_operacionais.custo_aquisicao_animais },
+                  { label: '🐖 Aquis. Plantel',    value: relFin.custos_operacionais.custo_aquisicao_plantel ?? 0 },
+                  { label: '⚙️ Total Operac.',     value: relFin.custos_operacionais.total_operacional, bold: true },
                 ].map((item, i) => (
-                  <div key={i} style={{ padding: '10px 12px', background: '#f8f9fa', borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, color: '#6c757d', textTransform: 'uppercase', fontWeight: 600 }}>{item.label}</div>
-                    <div style={{ fontWeight: item.bold ? 700 : 600, fontSize: 15, color: '#212529', marginTop: 4 }}>{fmtMoeda(item.value)}</div>
+                  <div key={i} style={{ padding: '8px 10px', background: '#f8f9fa', borderRadius: 7, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, color: '#6c757d', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</div>
+                    <div style={{ fontWeight: item.bold ? 700 : 600, fontSize: 13, color: '#212529', marginTop: 3, whiteSpace: 'nowrap' }}>{fmtMoeda(item.value)}</div>
                   </div>
                 ))}
               </div>
