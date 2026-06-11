@@ -362,9 +362,14 @@ export default function Relatorios() {
     document.head.appendChild(styleTag)
     document.body.appendChild(overlay)
 
+    const tituloOriginal = document.title
+    const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')
+    document.title = `Relatório GMD — GranjaApp ${dataHoje}`
+
     setTimeout(() => {
       window.print()
       setTimeout(() => {
+        document.title = tituloOriginal
         overlay.remove()
         styleTag.remove()
       }, 500)
