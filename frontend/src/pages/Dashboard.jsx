@@ -4,6 +4,11 @@ import api from '../services/api'
 
 const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 const fmtData = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-'
+const fmtK = (v) => {
+  const n = Number(v || 0)
+  if (Math.abs(n) >= 10000) return `R$${(n / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`
+  return `R$${n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+}
 
 const faseBadge = {
   maternidade: 'badge-purple',
@@ -36,12 +41,12 @@ export default function Dashboard() {
   )
 
   const stats = [
-    { icon: '🐖', label: 'Lotes Ativos', value: data?.total_lotes_ativos ?? 0, cls: 'green' },
-    { icon: '🐷', label: 'Animais Ativos', value: data?.total_animais ?? 0, cls: 'blue' },
-    { icon: '💉', label: 'Vacinações', value: data?.total_vacinacoes ?? 0, cls: 'purple' },
-    { icon: '🫀', label: 'Partos (30 dias)', value: data?.partos_previstos_30dias ?? 0, cls: 'orange' },
-    { icon: '📈', label: 'Receitas', value: fmtMoeda(data?.receitas), cls: 'teal' },
-    { icon: '📉', label: 'Despesas', value: fmtMoeda(data?.despesas), cls: 'red' },
+    { icon: '🐖', label: 'Lotes Ativos',  value: data?.total_lotes_ativos ?? 0,      cls: 'green'  },
+    { icon: '🐷', label: 'Animais',        value: data?.total_animais ?? 0,            cls: 'blue'   },
+    { icon: '💉', label: 'Vacinações',     value: data?.total_vacinacoes ?? 0,         cls: 'purple' },
+    { icon: '🫀', label: 'Partos/30d',     value: data?.partos_previstos_30dias ?? 0,  cls: 'orange' },
+    { icon: '📈', label: 'Receitas',       value: fmtK(data?.receitas),               cls: 'teal'   },
+    { icon: '📉', label: 'Despesas',       value: fmtK(data?.despesas),               cls: 'red'    },
   ]
 
   const saldo = data?.saldo ?? ((data?.receitas || 0) - (data?.despesas || 0))
@@ -72,6 +77,19 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      {/* Alerta alimentação — aparece quando há lotes sem registro hoje */}
+      {(data?.lotes_sem_alimentacao_hoje > 0) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
+          <span style={{ fontSize: 22, flexShrink: 0 }}>⚠️</span>
+          <div>
+            <strong style={{ color: '#664d03', fontSize: 13 }}>
+              {data.lotes_sem_alimentacao_hoje} lote{data.lotes_sem_alimentacao_hoje > 1 ? 's' : ''} sem alimentação registrada hoje
+            </strong>
+            <div style={{ fontSize: 11, color: '#856404', marginTop: 2 }}>Acesse Alimentação para registrar o fornecimento de ração.</div>
+          </div>
+        </div>
+      )}
 
       <div className="dashboard-row">
         {/* Lotes recentes */}
@@ -108,25 +126,21 @@ export default function Dashboard() {
 
         {/* Resumo financeiro */}
         <div className="card">
-          <div className="card-title">💰 Resumo Financeiro</div>
-          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="card-title" style={{ fontSize: 13 }}>💰 Resumo Financeiro</div>
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {[
-              { label: '📈 Receitas', value: fmtMoeda(data?.receitas), color: '#198754' },
-              { label: '📉 Despesas Financeiro', value: fmtMoeda(data?.despesas_financeiro ?? data?.despesas), color: '#dc3545' },
-              { label: '⚙️ Custos Operacionais', value: fmtMoeda(data?.total_operacional), color: '#fd7e14', sub: 'ração + sanidade + aquisição (lotes e plantel)' },
-              { label: '💼 Saldo da Operação', value: fmtMoeda(saldo), color: saldo >= 0 ? '#198754' : '#dc3545', bold: true, border: true },
-              { label: '🌽 Ração (30 dias)', value: fmtMoeda(data?.custo_racao_30dias) },
+              { label: '📈 Receitas',          value: fmtMoeda(data?.receitas),                                          color: '#198754' },
+              { label: '📉 Desp. Financeiro',  value: fmtMoeda(data?.despesas_financeiro ?? data?.despesas),             color: '#dc3545' },
+              { label: '⚙️ Custos Operac.',    value: fmtMoeda(data?.total_operacional),                                 color: '#fd7e14' },
+              { label: '💼 Saldo',             value: fmtMoeda(saldo), color: saldo >= 0 ? '#198754' : '#dc3545', bold: true, border: true },
+              { label: '🌽 Ração 30d',         value: fmtMoeda(data?.custo_racao_30dias) },
             ].map((row, i) => (
               <div key={i} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                flexWrap: 'wrap', gap: 4,
-                ...(row.border ? { borderTop: '1px solid #dee2e6', paddingTop: 12 } : {})
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4,
+                ...(row.border ? { borderTop: '1px solid #dee2e6', paddingTop: 8, marginTop: 2 } : {})
               }}>
-                <div>
-                  <span style={{ color: '#6c757d', fontSize: 13 }}>{row.label}</span>
-                  {row.sub && <div style={{ fontSize: 11, color: '#adb5bd' }}>{row.sub}</div>}
-                </div>
-                <strong style={{ color: row.color, fontSize: row.bold ? 16 : 14 }}>{row.value}</strong>
+                <span style={{ color: '#6c757d', fontSize: 12 }}>{row.label}</span>
+                <strong style={{ color: row.color, fontSize: row.bold ? 14 : 13, whiteSpace: 'nowrap' }}>{row.value}</strong>
               </div>
             ))}
           </div>
