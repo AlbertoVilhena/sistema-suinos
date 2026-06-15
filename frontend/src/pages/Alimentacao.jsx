@@ -15,12 +15,24 @@ const KG_LABEL = {
   maternidade: '2,5 kg/animal', creche: '0,8 kg/animal',
   crescimento: '1,8 kg/animal', terminacao: '2,8 kg/animal',
   matrizes: '2,5 kg/animal', reprodutores: '3,0 kg/animal',
+  matrizes_lactacao: '5,5 kg/animal', matrizes_pre_parto: '3,0 kg/animal',
+  matrizes_gestacao: '2,2 kg/animal', matrizes_vazia: '2,0 kg/animal',
 }
 
 const FASE_COR = {
   maternidade: '#9c27b0', creche: '#1976d2',
   crescimento: '#009688', terminacao: '#f57c00',
   matrizes: '#e91e63', reprodutores: '#3f51b5',
+  matrizes_lactacao: '#198754', matrizes_pre_parto: '#dc3545',
+  matrizes_gestacao: '#0d6efd', matrizes_vazia: '#6c757d',
+}
+
+const FASE_BADGE_LABEL = {
+  maternidade: 'maternidade', creche: 'creche',
+  crescimento: 'crescimento', terminacao: 'terminação',
+  matrizes: 'matrizes', reprodutores: 'reprodutores',
+  matrizes_lactacao: 'lactação', matrizes_pre_parto: 'pré-parto',
+  matrizes_gestacao: 'gestação', matrizes_vazia: 'vazia',
 }
 
 const plantelGrupoLabel = {
@@ -354,7 +366,7 @@ export default function Alimentacao() {
                             <td data-label="Fase">
                               {d.fase && (
                                 <span style={{ background: cor + '22', color: cor, border: `1px solid ${cor}55`, borderRadius: 10, padding: '2px 8px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                  {d.fase}
+                                  {FASE_BADGE_LABEL[d.fase?.toLowerCase()] || d.fase}
                                 </span>
                               )}
                             </td>

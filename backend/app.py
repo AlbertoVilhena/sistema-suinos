@@ -1467,8 +1467,19 @@ KG_POR_ANIMAL_DIA = {
     'crescimento': 1.8,
     'terminacao': 2.8,
     'matrizes': 2.5,
+    'matrizes_gestacao': 2.2,
+    'matrizes_lactacao': 5.5,
+    'matrizes_pre_parto': 3.0,
+    'matrizes_vazia': 2.0,
     'reprodutores': 3.0,
     'geral': 2.5,
+}
+
+FASE_PLANTEL_LABEL = {
+    'matrizes_gestacao':  '🤰 Matrizes Gestação',
+    'matrizes_lactacao':  '🍼 Matrizes Lactação',
+    'matrizes_pre_parto': '🏥 Matrizes Pré-Parto',
+    'matrizes_vazia':     '🐷 Matrizes Vazias',
 }
 
 
@@ -1523,29 +1534,50 @@ def get_alimentacao_diaria():
             'formulacao_sugerida_nome': form_sugerida.nome if form_sugerida else None,
         })
 
-    qtd_matrizes = Plantel.query.filter_by(tipo='matriz', status='ativo').count()
-    qtd_reprodutores = Plantel.query.filter_by(tipo='reprodutor', status='ativo').count()
+    # Matrizes: agrupa por fase reprodutiva (lactacao tem prioridade no topo)
+    ORDEM_FASES_MATRIZ = ['matrizes_lactacao', 'matrizes_pre_parto', 'matrizes_gestacao', 'matrizes_vazia']
+    matrizes_ativas = Plantel.query.filter_by(tipo='matriz', status='ativo').all()
+    fase_grupos = {}
+    for m in matrizes_ativas:
+        chave = f'matrizes_{get_fase_reprodutiva(m.brinco)}'
+        fase_grupos[chave] = fase_grupos.get(chave, 0) + 1
 
-    for grupo_key, grupo_label, qtd in [
-        ('matrizes', '🐷 Matrizes', qtd_matrizes),
-        ('reprodutores', '🐗 Reprodutores', qtd_reprodutores),
-    ]:
+    for grupo_key in ORDEM_FASES_MATRIZ:
+        qtd = fase_grupos.get(grupo_key, 0)
         if qtd == 0:
             continue
         kg_dia = KG_POR_ANIMAL_DIA.get(grupo_key, 2.5)
-        kg_sugerido = round(qtd * kg_dia, 1)
         alims_hoje = alims_por_plantel.get(grupo_key, [])
-        total_hoje = round(sum(a.quantidade_kg for a in alims_hoje), 2)
         destinos.append({
             'tipo': 'plantel',
             'id': grupo_key,
-            'nome': grupo_label,
+            'nome': FASE_PLANTEL_LABEL.get(grupo_key, grupo_key),
             'fase': grupo_key,
             'quantidade_animais': qtd,
-            'kg_sugerido': kg_sugerido,
+            'kg_sugerido': round(qtd * kg_dia, 1),
             'kg_dia_referencia': kg_dia,
             'alimentado_hoje': len(alims_hoje) > 0,
-            'total_kg_hoje': total_hoje,
+            'total_kg_hoje': round(sum(a.quantidade_kg for a in alims_hoje), 2),
+            'registros_hoje': [a.to_dict() for a in alims_hoje],
+            'formulacao_sugerida_id': None,
+            'formulacao_sugerida_nome': None,
+        })
+
+    # Reprodutores: grupo único
+    qtd_reprodutores = Plantel.query.filter_by(tipo='reprodutor', status='ativo').count()
+    if qtd_reprodutores > 0:
+        kg_dia = KG_POR_ANIMAL_DIA.get('reprodutores', 3.0)
+        alims_hoje = alims_por_plantel.get('reprodutores', [])
+        destinos.append({
+            'tipo': 'plantel',
+            'id': 'reprodutores',
+            'nome': '🐗 Reprodutores',
+            'fase': 'reprodutores',
+            'quantidade_animais': qtd_reprodutores,
+            'kg_sugerido': round(qtd_reprodutores * kg_dia, 1),
+            'kg_dia_referencia': kg_dia,
+            'alimentado_hoje': len(alims_hoje) > 0,
+            'total_kg_hoje': round(sum(a.quantidade_kg for a in alims_hoje), 2),
             'registros_hoje': [a.to_dict() for a in alims_hoje],
             'formulacao_sugerida_id': None,
             'formulacao_sugerida_nome': None,
