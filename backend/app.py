@@ -1534,13 +1534,35 @@ def get_alimentacao_diaria():
             'formulacao_sugerida_nome': form_sugerida.nome if form_sugerida else None,
         })
 
-    # Matrizes: agrupa por fase reprodutiva (lactacao tem prioridade no topo)
+    # Matrizes: agrupa por fase reprodutiva — 2 queries batch em vez de N+1
     ORDEM_FASES_MATRIZ = ['matrizes_lactacao', 'matrizes_pre_parto', 'matrizes_gestacao', 'matrizes_vazia']
     matrizes_ativas = Plantel.query.filter_by(tipo='matriz', status='ativo').all()
     fase_grupos = {}
-    for m in matrizes_ativas:
-        chave = f'matrizes_{get_fase_reprodutiva(m.brinco)}'
-        fase_grupos[chave] = fase_grupos.get(chave, 0) + 1
+    if matrizes_ativas:
+        brincos = [m.brinco for m in matrizes_ativas]
+        subq = db.session.query(
+            Reproducao.femea_brinco,
+            func.max(Reproducao.id).label('max_id')
+        ).filter(Reproducao.femea_brinco.in_(brincos)).group_by(Reproducao.femea_brinco).subquery()
+        repros_latest = db.session.query(Reproducao).join(subq, Reproducao.id == subq.c.max_id).all()
+        repros_by_brinco = {r.femea_brinco: r for r in repros_latest}
+
+        hoje = date.today()
+        def _fase_matriz(repro):
+            if not repro:
+                return 'vazia'
+            if repro.status == 'gestacao':
+                if repro.data_parto_previsto and (repro.data_parto_previsto - hoje).days <= 10:
+                    return 'pre_parto'
+                return 'gestacao'
+            if repro.status in ('parto', 'desmame') and repro.data_parto_real:
+                if (hoje - repro.data_parto_real).days <= 35:
+                    return 'lactacao'
+            return 'vazia'
+
+        for m in matrizes_ativas:
+            chave = f'matrizes_{_fase_matriz(repros_by_brinco.get(m.brinco))}'
+            fase_grupos[chave] = fase_grupos.get(chave, 0) + 1
 
     for grupo_key in ORDEM_FASES_MATRIZ:
         qtd = fase_grupos.get(grupo_key, 0)
