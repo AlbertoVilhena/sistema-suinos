@@ -70,6 +70,7 @@ export default function Alimentacao() {
   const [diariaLoading, setDiariaLoading] = useState(false)
   const [diariaInputs, setDiariaInputs] = useState({})   // key→{kg, formulacao_id}
   const [diariaSaving, setDiariaSaving] = useState(false)
+  const [diariaEditando, setDiariaEditando] = useState({}) // key→true quando em modo edição
 
   const loadDiaria = (dt) => {
     setDiariaLoading(true)
@@ -95,12 +96,53 @@ export default function Alimentacao() {
   const setDiariaInput = (key, field, value) =>
     setDiariaInputs(prev => ({ ...prev, [key]: { ...(prev[key] || {}), [field]: value } }))
 
+  const entrarEdicao = (key, d) => {
+    const reg = d.registros_hoje?.[0]
+    setDiariaInputs(prev => ({
+      ...prev,
+      [key]: {
+        kg: String(d.total_kg_hoje || d.kg_sugerido),
+        formulacao_id: String(reg?.formulacao_id || ''),
+      }
+    }))
+    setDiariaEditando(prev => ({ ...prev, [key]: true }))
+  }
+
+  const cancelarEdicao = (key) => {
+    setDiariaEditando(prev => ({ ...prev, [key]: false }))
+  }
+
+  const salvarEdicao = async (key, d) => {
+    const inp = diariaInputs[key] || {}
+    const kg = parseFloat(inp.kg)
+    if (!kg || kg <= 0) { toast.warning('Informe a quantidade de kg'); return }
+    setDiariaSaving(true)
+    try {
+      // Apaga registros anteriores do dia para este destino
+      for (const reg of d.registros_hoje) {
+        await api.delete(`/api/alimentacoes/${reg.id}`)
+      }
+      // Cria novo registro com valores corrigidos
+      const fid = inp.formulacao_id ? parseInt(inp.formulacao_id) : null
+      const fobj = diariaData.formulacoes.find(f => f.id === fid)
+      const payload = { data: diariaDate, quantidade_kg: kg, formulacao_id: fid || null, racao_tipo: fobj?.nome || null }
+      if (d.tipo === 'lote') payload.lote_id = d.id
+      else payload.plantel_grupo = d.id
+      await api.post('/api/alimentacao/bulk', { registros: [payload] })
+      toast.success('✅ Alimentação corrigida com sucesso!')
+      setDiariaEditando(prev => ({ ...prev, [key]: false }))
+      loadDiaria(diariaDate)
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Erro ao editar')
+    } finally { setDiariaSaving(false) }
+  }
+
   const handleSalvarDiaria = async () => {
     if (!diariaData) return
     setDiariaSaving(true)
     const registros = []
     diariaData.destinos.forEach(d => {
-      if (d.alimentado_hoje) return
+      if (d.alimentado_hoje && !diariaEditando[d.tipo === 'lote' ? `lote-${d.id}` : `plantel-${d.id}`]) return
       const key = d.tipo === 'lote' ? `lote-${d.id}` : `plantel-${d.id}`
       const inp = diariaInputs[key] || {}
       const kg = parseFloat(inp.kg)
@@ -357,7 +399,10 @@ export default function Alimentacao() {
                         const key = d.tipo === 'lote' ? `lote-${d.id}` : `plantel-${d.id}`
                         const inp = diariaInputs[key] || {}
                         const cor = FASE_COR[d.fase?.toLowerCase()] || '#6c757d'
-                        const rowBg = d.alimentado_hoje ? '#f0fff4' : 'inherit'
+                        const editando = !!diariaEditando[key]
+                        const alimentadoHoje = d.alimentado_hoje && !editando
+                        const rowBg = alimentadoHoje ? '#f0fff4' : editando ? '#fffbea' : 'inherit'
+                        const formulacaoNome = d.registros_hoje?.[0]?.formulacao_nome || null
                         return (
                           <tr key={key} style={{ background: rowBg }}>
                             <td data-label="Destino">
@@ -378,7 +423,7 @@ export default function Alimentacao() {
                               <div style={{ fontSize: 10, color: '#adb5bd' }}>{KG_LABEL[d.fase?.toLowerCase()] || ''}</div>
                             </td>
                             <td data-label="Kg fornecido">
-                              {d.alimentado_hoje ? (
+                              {alimentadoHoje ? (
                                 <span style={{ fontWeight: 700, color: '#198754' }}>{d.total_kg_hoje} kg</span>
                               ) : (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -393,9 +438,9 @@ export default function Alimentacao() {
                               )}
                             </td>
                             <td data-label="Formulação">
-                              {d.alimentado_hoje ? (
-                                <span style={{ fontSize: 12, color: '#6c757d' }}>
-                                  {diariaData.formulacoes.find(f => String(f.id) === String(d.formulacao_sugerida_id))?.nome || '—'}
+                              {alimentadoHoje ? (
+                                <span style={{ fontSize: 12, color: formulacaoNome ? '#212529' : '#adb5bd', fontStyle: formulacaoNome ? 'normal' : 'italic' }}>
+                                  {formulacaoNome || 'Sem formulação'}
                                 </span>
                               ) : (
                                 <select
@@ -411,10 +456,27 @@ export default function Alimentacao() {
                               )}
                             </td>
                             <td data-label="Status" style={{ textAlign: 'center' }}>
-                              {d.alimentado_hoje
-                                ? <span style={{ background: '#d8f3dc', color: '#1b5e20', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>✅ OK</span>
-                                : <span style={{ background: '#fff3cd', color: '#664d03', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600 }}>⏳ Pendente</span>
-                              }
+                              {alimentadoHoje ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                  <span style={{ background: '#d8f3dc', color: '#1b5e20', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>✅ OK</span>
+                                  {canWrite() && (
+                                    <button onClick={() => entrarEdicao(key, d)} style={{ background: 'none', border: 'none', color: '#6c757d', fontSize: 11, cursor: 'pointer', padding: '2px 6px', textDecoration: 'underline' }}>
+                                      ✏️ Corrigir
+                                    </button>
+                                  )}
+                                </div>
+                              ) : editando ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  <button onClick={() => salvarEdicao(key, d)} disabled={diariaSaving} style={{ background: '#198754', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                                    💾 Salvar
+                                  </button>
+                                  <button onClick={() => cancelarEdicao(key)} style={{ background: 'none', border: 'none', color: '#6c757d', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
+                                    Cancelar
+                                  </button>
+                                </div>
+                              ) : (
+                                <span style={{ background: '#fff3cd', color: '#664d03', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 600 }}>⏳ Pendente</span>
+                              )}
                             </td>
                           </tr>
                         )
