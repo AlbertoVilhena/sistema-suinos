@@ -25,6 +25,9 @@ const FASE_COR = {
   matrizes: '#e91e63', reprodutores: '#3f51b5',
   matrizes_lactacao: '#198754', matrizes_pre_parto: '#dc3545',
   matrizes_gestacao: '#0d6efd', matrizes_vazia: '#6c757d',
+  // subfases de lote — herdam cor da fase base
+  creche_pre_inicial: '#1565c0', creche_inicial: '#1976d2',
+  crescimento_leve: '#00796b', terminacao_pesada: '#e65100',
 }
 
 const FASE_BADGE_LABEL = {
@@ -33,6 +36,17 @@ const FASE_BADGE_LABEL = {
   matrizes: 'matrizes', reprodutores: 'reprodutores',
   matrizes_lactacao: 'lactação', matrizes_pre_parto: 'pré-parto',
   matrizes_gestacao: 'gestação', matrizes_vazia: 'vazia',
+  // subfases de lote
+  creche_pre_inicial: 'pré-inicial', creche_inicial: 'cr. inicial',
+  crescimento_leve: 'cresc. leve', terminacao_pesada: 'term. pesada',
+}
+
+const FASE_BASE = (fase) => {
+  if (!fase) return ''
+  if (fase.startsWith('creche')) return 'creche'
+  if (fase.startsWith('crescimento')) return 'crescimento'
+  if (fase.startsWith('terminacao')) return 'terminacao'
+  return fase
 }
 
 const plantelGrupoLabel = {
@@ -410,9 +424,16 @@ export default function Alimentacao() {
                             </td>
                             <td data-label="Fase">
                               {d.fase && (
-                                <span style={{ background: cor + '22', color: cor, border: `1px solid ${cor}55`, borderRadius: 10, padding: '2px 8px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                  {FASE_BADGE_LABEL[d.fase?.toLowerCase()] || d.fase}
-                                </span>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                  <span style={{ background: cor + '22', color: cor, border: `1px solid ${cor}55`, borderRadius: 10, padding: '2px 8px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    {d.fase_label || FASE_BADGE_LABEL[d.fase?.toLowerCase()] || d.fase}
+                                  </span>
+                                  {d.peso_medio != null && (
+                                    <span style={{ fontSize: 10, color: '#6c757d', paddingLeft: 4 }}>
+                                      ~{d.peso_medio} kg/animal
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </td>
                             <td data-label="Animais" style={{ textAlign: 'center', fontWeight: 600 }}>

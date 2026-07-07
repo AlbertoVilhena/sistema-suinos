@@ -1505,25 +1505,69 @@ def get_alimentacao_diaria():
 
     formulacoes = Formulacao.query.filter_by(ativa=True).all()
 
+    # Batch: última pesagem por lote (1 query)
+    lote_ids = [l.id for l in lotes]
+    pesagem_map = {}
+    if lote_ids:
+        subq_p = db.session.query(
+            Pesagem.lote_id,
+            func.max(Pesagem.id).label('max_id')
+        ).filter(Pesagem.lote_id.in_(lote_ids)).group_by(Pesagem.lote_id).subquery()
+        ults_pesagens = db.session.query(Pesagem).join(subq_p, Pesagem.id == subq_p.c.max_id).all()
+        pesagem_map = {p.lote_id: p.peso_medio for p in ults_pesagens}
+
+    def subfase_lote(fase, peso_medio, data_inicio_fase):
+        """Retorna (subfase_key, subfase_label, kg_dia) baseado no peso real ou dias na fase."""
+        hoje_local = date.today()
+        dias_fase = (hoje_local - data_inicio_fase).days if data_inicio_fase else 999
+
+        if fase == 'maternidade':
+            return 'maternidade', 'maternidade', 2.5
+
+        if fase == 'creche':
+            if peso_medio is not None:
+                if peso_medio < 8:
+                    return 'creche_pre_inicial', 'creche pré-inicial', 0.35
+                return 'creche_inicial', 'creche inicial', 0.8
+            # fallback por dias
+            if dias_fase < 21:
+                return 'creche_pre_inicial', 'creche pré-inicial', 0.35
+            return 'creche_inicial', 'creche inicial', 0.8
+
+        if fase == 'crescimento':
+            if peso_medio is not None and peso_medio < 40:
+                return 'crescimento_leve', 'cresc. leve', 1.5
+            return 'crescimento', 'crescimento', 1.8
+
+        if fase == 'terminacao':
+            if peso_medio is not None and peso_medio >= 95:
+                return 'terminacao_pesada', 'termin. pesada', 2.8
+            return 'terminacao', 'terminação', 2.5
+
+        return fase, fase, KG_POR_ANIMAL_DIA.get(fase, 2.0)
+
     destinos = []
 
     for lote in lotes:
         qtd = lote.quantidade_atual or 0
         fase = (lote.fase or '').lower()
-        kg_dia = KG_POR_ANIMAL_DIA.get(fase, 2.0)
+        peso_medio = pesagem_map.get(lote.id)
+        subfase_key, subfase_label, kg_dia = subfase_lote(fase, peso_medio, lote.data_inicio_fase)
         kg_sugerido = round(qtd * kg_dia, 1)
 
         alims_hoje = alims_por_lote.get(lote.id, [])
         total_hoje = round(sum(a.quantidade_kg for a in alims_hoje), 2)
 
-        form_sugerida = next((f for f in formulacoes if f.fase == fase), None) or \
+        form_sugerida = next((f for f in formulacoes if f.fase == subfase_key or f.fase == fase), None) or \
                         (formulacoes[0] if formulacoes else None)
 
         destinos.append({
             'tipo': 'lote',
             'id': lote.id,
             'nome': lote.numero,
-            'fase': lote.fase,
+            'fase': subfase_key,
+            'fase_label': subfase_label,
+            'peso_medio': peso_medio,
             'quantidade_animais': qtd,
             'kg_sugerido': kg_sugerido,
             'kg_dia_referencia': kg_dia,
