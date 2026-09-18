@@ -716,26 +716,20 @@ export default function Alimentacao() {
               </div>
             ) : (
               <>
-                {/* Modo: Grupo ou Individual */}
-                <div className="form-group span-2">
-                  <label>Tipo de registro</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${form.plantel_modo === 'grupo' ? 'btn-primary' : 'btn-outline'}`}
-                      onClick={() => setForm(f => ({ ...f, plantel_modo: 'grupo', plantel_brinco: '' }))}
-                    >
-                      👥 Grupo
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${form.plantel_modo === 'individual' ? 'btn-primary' : 'btn-outline'}`}
-                      onClick={() => setForm(f => ({ ...f, plantel_modo: 'individual', plantel_grupo: '' }))}
-                    >
-                      👤 Animal Individual
-                    </button>
+                {/* Modo: Grupo ou Individual — registro individual novo foi descontinuado
+                    (confundia o pessoal de campo); só aparece aqui para editar um registro antigo. */}
+                {editing && form.plantel_modo === 'individual' ? (
+                  <div className="form-group span-2">
+                    <label>Tipo de registro</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="button" className="btn btn-sm btn-primary">👤 Animal Individual (registro antigo)</button>
+                      <button type="button" className="btn btn-sm btn-outline"
+                        onClick={() => setForm(f => ({ ...f, plantel_modo: 'grupo', plantel_brinco: '' }))}>
+                        👥 Trocar para Grupo
+                      </button>
+                    </div>
                   </div>
-                </div>
+                ) : null}
 
                 {form.plantel_modo === 'grupo' ? (
                   <div className="form-group">

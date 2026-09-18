@@ -205,6 +205,20 @@ class Reproducao(db.Model):
     observacoes = db.Column(db.Text)
     lote_id = db.Column(db.Integer, db.ForeignKey('lotes.id'), nullable=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    # Ficha de matriz — cobertura
+    numero_montas = db.Column(db.Integer)
+    data_retorno_cio = db.Column(db.Date)
+    vacinas = db.Column(db.String(255))
+    # Ficha de matriz — parto
+    quantidade_natimortos = db.Column(db.Integer)
+    quantidade_mumificados = db.Column(db.Integer)
+    peso_medio_nascimento = db.Column(db.Float)
+    quantidade_transferidos = db.Column(db.Integer)
+    # Ficha de matriz — desmame
+    quantidade_mortos_desmame = db.Column(db.Integer)
+    quantidade_desmamados = db.Column(db.Integer)
+    peso_medio_desmame = db.Column(db.Float)
+    idade_desmame = db.Column(db.Integer)
 
     def to_dict(self):
         return {
@@ -220,7 +234,18 @@ class Reproducao(db.Model):
             'observacoes': self.observacoes,
             'lote_id': self.lote_id,
             'lote_numero': self.lote.numero if self.lote else None,
-            'criado_em': self.criado_em.isoformat()
+            'criado_em': self.criado_em.isoformat(),
+            'numero_montas': self.numero_montas,
+            'data_retorno_cio': self.data_retorno_cio.isoformat() if self.data_retorno_cio else None,
+            'vacinas': self.vacinas,
+            'quantidade_natimortos': self.quantidade_natimortos,
+            'quantidade_mumificados': self.quantidade_mumificados,
+            'peso_medio_nascimento': self.peso_medio_nascimento,
+            'quantidade_transferidos': self.quantidade_transferidos,
+            'quantidade_mortos_desmame': self.quantidade_mortos_desmame,
+            'quantidade_desmamados': self.quantidade_desmamados,
+            'peso_medio_desmame': self.peso_medio_desmame,
+            'idade_desmame': self.idade_desmame,
         }
 
 
@@ -377,6 +402,7 @@ class Plantel(db.Model):
     tipo = db.Column(db.String(20), nullable=False)  # matriz, reprodutor
     nome = db.Column(db.String(100))
     raca = db.Column(db.String(50))
+    mossa = db.Column(db.String(50))
     data_nascimento = db.Column(db.Date)
     peso_atual = db.Column(db.Float)
     status = db.Column(db.String(20), default='ativo')  # ativo, descartado, morto
@@ -401,6 +427,7 @@ class Plantel(db.Model):
             'tipo': self.tipo,
             'nome': self.nome or '',
             'raca': self.raca or '',
+            'mossa': self.mossa or '',
             'data_nascimento': self.data_nascimento.isoformat() if self.data_nascimento else None,
             'idade_meses': idade_meses,
             'peso_atual': self.peso_atual,
@@ -1309,7 +1336,18 @@ def create_reproducao():
         quantidade_vivos=to_int(data.get('quantidade_vivos')),
         status=data.get('status', 'gestacao'),
         observacoes=data.get('observacoes') or None,
-        lote_id=to_int(data.get('lote_id'))
+        lote_id=to_int(data.get('lote_id')),
+        numero_montas=to_int(data.get('numero_montas')),
+        data_retorno_cio=datetime.strptime(data['data_retorno_cio'], '%Y-%m-%d').date() if data.get('data_retorno_cio') else None,
+        vacinas=data.get('vacinas') or None,
+        quantidade_natimortos=to_int(data.get('quantidade_natimortos')),
+        quantidade_mumificados=to_int(data.get('quantidade_mumificados')),
+        peso_medio_nascimento=to_float(data.get('peso_medio_nascimento')),
+        quantidade_transferidos=to_int(data.get('quantidade_transferidos')),
+        quantidade_mortos_desmame=to_int(data.get('quantidade_mortos_desmame')),
+        quantidade_desmamados=to_int(data.get('quantidade_desmamados')),
+        peso_medio_desmame=to_float(data.get('peso_medio_desmame')),
+        idade_desmame=to_int(data.get('idade_desmame')),
     )
     db.session.add(rep)
     db.session.commit()
@@ -1332,9 +1370,18 @@ def update_reproducao(rid):
     for f in ['observacoes']:
         if f in data:
             setattr(rep, f, data[f] or None)
-    for f in ['quantidade_nascidos', 'quantidade_vivos', 'lote_id']:
+    for f in ['quantidade_nascidos', 'quantidade_vivos', 'lote_id', 'numero_montas',
+              'quantidade_natimortos', 'quantidade_mumificados', 'quantidade_transferidos',
+              'quantidade_mortos_desmame', 'quantidade_desmamados', 'idade_desmame']:
         if f in data:
             setattr(rep, f, to_int(data[f]))
+    for f in ['peso_medio_nascimento', 'peso_medio_desmame']:
+        if f in data:
+            setattr(rep, f, to_float(data[f]))
+    if 'vacinas' in data:
+        rep.vacinas = data['vacinas'] or None
+    if 'data_retorno_cio' in data:
+        rep.data_retorno_cio = datetime.strptime(data['data_retorno_cio'], '%Y-%m-%d').date() if data['data_retorno_cio'] else None
     # Atualizar datas
     if 'data_cobertura' in data and data['data_cobertura']:
         dc = datetime.strptime(data['data_cobertura'], '%Y-%m-%d').date()
@@ -1361,6 +1408,73 @@ def delete_reproducao(rid):
     db.session.delete(rep)
     db.session.commit()
     return jsonify({'message': 'Registro excluído com sucesso'})
+
+
+@app.route('/api/reproducoes/ficha/<string:brinco>', methods=['GET'])
+@jwt_required()
+def ficha_matriz(brinco):
+    """Histórico completo de uma matriz no formato da ficha física (cobertura + parto)."""
+    matriz = Plantel.query.filter_by(brinco=brinco).first()
+    if not matriz:
+        return jsonify({'error': 'Matriz não encontrada no plantel'}), 404
+
+    ciclos = Reproducao.query.filter_by(femea_brinco=brinco).order_by(Reproducao.data_cobertura.asc()).all()
+
+    numero_parto = 0
+    ciclos_dict = []
+    for c in ciclos:
+        d = c.to_dict()
+        if c.data_parto_real:
+            numero_parto += 1
+            d['numero_parto'] = numero_parto
+        else:
+            d['numero_parto'] = None
+        ciclos_dict.append(d)
+
+    return jsonify({
+        'matriz': matriz.to_dict(),
+        'ciclos': ciclos_dict,
+    })
+
+
+@app.route('/api/relatorios/reproducao', methods=['GET'])
+@jwt_required()
+def relatorio_reproducao():
+    hoje = date.today()
+    em_30_dias = hoje + timedelta(days=30)
+
+    todas = Reproducao.query.options(joinedload(Reproducao.lote)).order_by(Reproducao.data_cobertura.desc()).all()
+    partos = [r for r in todas if r.data_parto_real]
+
+    total_nascidos = sum(r.quantidade_nascidos or 0 for r in partos)
+    total_vivos = sum(r.quantidade_vivos or 0 for r in partos)
+    total_desmamados = sum(r.quantidade_desmamados or 0 for r in partos if r.quantidade_desmamados is not None)
+    partos_com_desmame = [r for r in partos if r.quantidade_desmamados is not None]
+
+    resumo = {
+        'total_ciclos': len(todas),
+        'matrizes_gestantes': len([r for r in todas if r.status == 'gestacao']),
+        'partos_previstos_30dias': len([
+            r for r in todas if r.status == 'gestacao' and r.data_parto_previsto
+            and hoje <= r.data_parto_previsto <= em_30_dias
+        ]),
+        'partos_atrasados': len([
+            r for r in todas if r.status == 'gestacao' and r.data_parto_previsto and r.data_parto_previsto < hoje
+        ]),
+        'total_partos_registrados': len(partos),
+        'total_nascidos': total_nascidos,
+        'total_vivos': total_vivos,
+        'media_nascidos_por_parto': round(total_nascidos / len(partos), 1) if partos else 0,
+        'media_vivos_por_parto': round(total_vivos / len(partos), 1) if partos else 0,
+        'taxa_mortalidade_nascimento': round((1 - total_vivos / total_nascidos) * 100, 1) if total_nascidos else 0,
+        'total_desmamados': total_desmamados,
+        'media_desmamados_por_parto': round(total_desmamados / len(partos_com_desmame), 1) if partos_com_desmame else 0,
+    }
+
+    return jsonify({
+        'resumo': resumo,
+        'registros': [r.to_dict() for r in todas],
+    })
 
 
 # ============== ALIMENTACAO ROUTES ==============
@@ -2114,20 +2228,28 @@ def get_dashboard():
     receitas = db.session.query(func.sum(Financeiro.valor)).filter_by(tipo='receita').scalar() or 0
     despesas_fin = db.session.query(func.sum(Financeiro.valor)).filter_by(tipo='despesa').scalar() or 0
 
-    # Custos operacionais dos outros módulos
-    # Usa Python para calcular custo de ração com fallback na formulação
-    # (custo_unitario pode ser NULL se o usuário não informou preço ao registrar)
-    alims_all = Alimentacao.query.options(joinedload(Alimentacao.formulacao_ref)).all()
-    custo_racao_total = 0
-    custo_racao_30d = 0
-    for a in alims_all:
-        qty = a.quantidade_kg or 0
-        cost = a.custo_unitario
-        if cost is None and a.formulacao_ref:
-            cost = a.formulacao_ref.calcular_custo_por_kg()
-        custo_racao_total += qty * (cost or 0)
-        if a.data and a.data >= ultimo_mes:
-            custo_racao_30d += qty * (cost or 0)
+    # Custo de ração: soma no banco quando custo_unitario já está informado;
+    # só recorre a formulação (tabela pequena, cabe em memória) para o restante.
+    # Evita carregar a tabela alimentacoes inteira (crescente todo dia) em Python.
+    def _custo_racao(filtro_data=None):
+        direto_q = db.session.query(func.sum(Alimentacao.quantidade_kg * Alimentacao.custo_unitario)) \
+            .filter(Alimentacao.custo_unitario.isnot(None))
+        indireto_q = db.session.query(Alimentacao.formulacao_id, func.sum(Alimentacao.quantidade_kg)) \
+            .filter(Alimentacao.custo_unitario.is_(None))
+        if filtro_data is not None:
+            direto_q = direto_q.filter(Alimentacao.data >= filtro_data)
+            indireto_q = indireto_q.filter(Alimentacao.data >= filtro_data)
+        direto = direto_q.scalar() or 0
+        indireto = 0
+        for formulacao_id, kg in indireto_q.group_by(Alimentacao.formulacao_id).all():
+            f = formulacoes_map.get(formulacao_id)
+            if f:
+                indireto += (kg or 0) * f.calcular_custo_por_kg()
+        return direto + indireto
+
+    formulacoes_map = {f.id: f for f in Formulacao.query.all()}
+    custo_racao_total = _custo_racao()
+    custo_racao_30d = _custo_racao(ultimo_mes)
 
     custo_sanidade = db.session.query(func.sum(func.coalesce(Vacinacao.custo, 0))).scalar() or 0
     # Aquisição: animais de lote + matrizes/barrão do plantel
@@ -2766,6 +2888,7 @@ def create_plantel():
         tipo=data['tipo'],
         nome=data.get('nome') or None,
         raca=data.get('raca') or None,
+        mossa=data.get('mossa') or None,
         data_nascimento=date.fromisoformat(data['data_nascimento']) if data.get('data_nascimento') else None,
         peso_atual=to_float(data.get('peso_atual')),
         status=data.get('status', 'ativo'),
@@ -2785,7 +2908,7 @@ def update_plantel(pid):
         return jsonify({'error': 'Permissão negada'}), 403
     p = Plantel.query.get_or_404(pid)
     data = request.get_json()
-    for f in ['brinco', 'tipo', 'nome', 'raca', 'status', 'origem', 'observacoes']:
+    for f in ['brinco', 'tipo', 'nome', 'raca', 'mossa', 'status', 'origem', 'observacoes']:
         if f in data:
             setattr(p, f, data[f] or None)
     if 'data_nascimento' in data:
@@ -2899,10 +3022,29 @@ def init_db():
             "CREATE INDEX IF NOT EXISTS idx_formulacao_itens_formulacao_id ON formulacao_itens(formulacao_id)",
             "CREATE INDEX IF NOT EXISTS idx_formulacao_itens_ingrediente_id ON formulacao_itens(ingrediente_id)",
             "CREATE INDEX IF NOT EXISTS idx_pesagens_lote_id ON pesagens(lote_id)",
+            "CREATE INDEX IF NOT EXISTS idx_lotes_status ON lotes(status)",
+            "CREATE INDEX IF NOT EXISTS idx_plantel_status ON plantel(status)",
+            "CREATE INDEX IF NOT EXISTS idx_plantel_tipo ON plantel(tipo)",
+            "CREATE INDEX IF NOT EXISTS idx_reproducoes_status ON reproducoes(status)",
+            "CREATE INDEX IF NOT EXISTS idx_reproducoes_data_parto_previsto ON reproducoes(data_parto_previsto)",
+            "CREATE INDEX IF NOT EXISTS idx_reproducoes_data_parto_real ON reproducoes(data_parto_real)",
             # GMD por fase
             "ALTER TABLE lotes ADD COLUMN IF NOT EXISTS data_inicio_fase DATE",
             # Retroativamente preenche lotes existentes com data_entrada (fase desde o início)
             "UPDATE lotes SET data_inicio_fase = data_entrada WHERE data_inicio_fase IS NULL",
+            # --- Ficha de Matriz: campos completos (cobertura, parto, desmame) ---
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS numero_montas INTEGER",
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS data_retorno_cio DATE",
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS vacinas VARCHAR(255)",
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS quantidade_natimortos INTEGER",
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS quantidade_mumificados INTEGER",
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS peso_medio_nascimento FLOAT",
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS quantidade_transferidos INTEGER",
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS quantidade_mortos_desmame INTEGER",
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS quantidade_desmamados INTEGER",
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS peso_medio_desmame FLOAT",
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS idade_desmame INTEGER",
+            "ALTER TABLE plantel ADD COLUMN IF NOT EXISTS mossa VARCHAR(50)",
         ]
         with db.engine.connect() as conn:
             for sql in migrations:

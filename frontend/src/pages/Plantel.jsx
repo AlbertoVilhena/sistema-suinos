@@ -13,7 +13,7 @@ const statusBadge = { ativo: 'badge-green', descartado: 'badge-yellow', morto: '
 const origemLabel = { comprado: 'Comprado', nascido: 'Nascido na granja' }
 
 const emptyForm = {
-  brinco: '', tipo: 'matriz', nome: '', raca: '',
+  brinco: '', tipo: 'matriz', nome: '', raca: '', mossa: '',
   data_nascimento: '', peso_atual: '', status: 'ativo',
   origem: 'comprado', custo_aquisicao: '', observacoes: ''
 }
@@ -224,6 +224,11 @@ export default function Plantel() {
               <label>Raça</label>
               <input value={form.raca} onChange={e => set('raca', e.target.value)}
                 placeholder="Ex: Landrace, Large White..." />
+            </div>
+            <div className="form-group">
+              <label>Mossa</label>
+              <input value={form.mossa} onChange={e => set('mossa', e.target.value)}
+                placeholder="Ex: 12-34" />
             </div>
             <div className="form-group">
               <label>Data de Nascimento</label>
