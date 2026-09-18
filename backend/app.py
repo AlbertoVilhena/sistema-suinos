@@ -1030,6 +1030,10 @@ def delete_vacinacao(vid):
 def relatorio_vacinacao():
     vacinacoes = Vacinacao.query.order_by(Vacinacao.data.desc()).all()
 
+    # Batch: lotes referenciados pelas vacinações — evita 1 query por registro
+    lote_ids_vac = {v.lote_id for v in vacinacoes if v.lote_id}
+    lotes_map_vac = {l.id: l for l in Lote.query.filter(Lote.id.in_(lote_ids_vac)).all()} if lote_ids_vac else {}
+
     # Agrupado por vacina
     por_vacina = {}
     for v in vacinacoes:
@@ -1045,7 +1049,7 @@ def relatorio_vacinacao():
     for v in vacinacoes:
         if not v.lote_id:
             continue
-        lote = Lote.query.get(v.lote_id)
+        lote = lotes_map_vac.get(v.lote_id)
         key = v.lote_id
         if key not in por_lote:
             por_lote[key] = {'lote_id': v.lote_id, 'lote_numero': lote.numero if lote else '-',
@@ -1067,25 +1071,42 @@ def relatorio_vacinacao():
         por_plantel[key]['custo_total'] += v.custo or 0
         por_plantel[key]['registros'].append(v.to_dict())
 
-    # Agenda pendente
+    # Agenda pendente — mesmo batching de /api/agenda-vacinacao, evita N+1
     hoje = date.today()
     pendentes = []
     aplicacoes = AplicacaoPlano.query.all()
+    plano_ids = {ap.plano_id for ap in aplicacoes}
+    planos_map = {
+        p.id: p for p in PlanoVacinacao.query.options(subqueryload(PlanoVacinacao.itens))
+            .filter(PlanoVacinacao.id.in_(plano_ids)).all()
+    } if plano_ids else {}
+    lote_ids_ap = {ap.lote_id for ap in aplicacoes if ap.lote_id}
+    lotes_map_ap = {l.id: l for l in Lote.query.filter(Lote.id.in_(lote_ids_ap)).all()} if lote_ids_ap else {}
+
+    vacinacoes_lote = {}
+    if lote_ids_ap:
+        for lid, vacina, data_v in db.session.query(Vacinacao.lote_id, Vacinacao.vacina, Vacinacao.data) \
+                .filter(Vacinacao.lote_id.in_(lote_ids_ap)).all():
+            vacinacoes_lote.setdefault((lid, vacina), []).append(data_v)
+    vacinacoes_plantel = {}
+    for vacina, data_v in db.session.query(Vacinacao.vacina, Vacinacao.data) \
+            .filter(Vacinacao.plantel_brinco.isnot(None)).all():
+        vacinacoes_plantel.setdefault(vacina, []).append(data_v)
+
     for ap in aplicacoes:
-        plano = PlanoVacinacao.query.get(ap.plano_id)
+        plano = planos_map.get(ap.plano_id)
         if not plano or not plano.ativo:
             continue
-        lote = Lote.query.get(ap.lote_id) if ap.lote_id else None
+        lote = lotes_map_ap.get(ap.lote_id) if ap.lote_id else None
         for item in plano.itens:
             data_prevista = ap.data_inicio + timedelta(days=item.dias_apos_entrada)
             if data_prevista > hoje:
                 continue
-            ja_aplicada = Vacinacao.query.filter(
-                Vacinacao.lote_id == ap.lote_id if ap.lote_id else Vacinacao.plantel_brinco.isnot(None),
-                Vacinacao.vacina == item.vacina,
-                Vacinacao.data >= data_prevista - timedelta(days=5),
-                Vacinacao.data <= data_prevista + timedelta(days=5)
-            ).first() is not None
+            janela_ini, janela_fim = data_prevista - timedelta(days=5), data_prevista + timedelta(days=5)
+            if ap.lote_id:
+                ja_aplicada = any(janela_ini <= d <= janela_fim for d in vacinacoes_lote.get((ap.lote_id, item.vacina), []))
+            else:
+                ja_aplicada = any(janela_ini <= d <= janela_fim for d in vacinacoes_plantel.get(item.vacina, []))
             if not ja_aplicada:
                 pendentes.append({
                     'vacina': item.vacina, 'dose': item.dose,
@@ -1240,33 +1261,47 @@ def get_agenda_vacinacao():
     completa = request.args.get('completa', 'false').lower() == 'true'
     aplicacoes = AplicacaoPlano.query.all()
     agenda = []
+    if not aplicacoes:
+        return jsonify(agenda)
+
+    # Batch: planos (com itens) e lotes envolvidos — evita 1 query por aplicação/item
+    plano_ids = {ap.plano_id for ap in aplicacoes}
+    planos_map = {
+        p.id: p for p in PlanoVacinacao.query.options(subqueryload(PlanoVacinacao.itens))
+            .filter(PlanoVacinacao.id.in_(plano_ids)).all()
+    }
+    lote_ids = {ap.lote_id for ap in aplicacoes if ap.lote_id}
+    lotes_map = {l.id: l for l in Lote.query.filter(Lote.id.in_(lote_ids)).all()} if lote_ids else {}
+
+    # Batch: vacinações já aplicadas, agrupadas para checar "já aplicada" em memória
+    vacinacoes_lote = {}
+    if lote_ids:
+        for lid, vacina, data_v in db.session.query(Vacinacao.lote_id, Vacinacao.vacina, Vacinacao.data) \
+                .filter(Vacinacao.lote_id.in_(lote_ids)).all():
+            vacinacoes_lote.setdefault((lid, vacina), []).append(data_v)
+
+    vacinacoes_plantel = {}
+    for vacina, data_v in db.session.query(Vacinacao.vacina, Vacinacao.data) \
+            .filter(Vacinacao.plantel_brinco.isnot(None)).all():
+        vacinacoes_plantel.setdefault(vacina, []).append(data_v)
 
     for ap in aplicacoes:
-        plano = PlanoVacinacao.query.get(ap.plano_id)
+        plano = planos_map.get(ap.plano_id)
         if not plano or not plano.ativo:
             continue
-        lote = Lote.query.get(ap.lote_id) if ap.lote_id else None
+        lote = lotes_map.get(ap.lote_id) if ap.lote_id else None
 
         for item in plano.itens:
             data_prevista = ap.data_inicio + timedelta(days=item.dias_apos_entrada)
             dias_diff = (data_prevista - hoje).days
+            janela_ini, janela_fim = data_prevista - timedelta(days=5), data_prevista + timedelta(days=5)
 
             # Verifica se já foi aplicada (vacina no mesmo lote/plantel próxima à data)
             ja_aplicada = False
             if ap.lote_id:
-                ja_aplicada = Vacinacao.query.filter(
-                    Vacinacao.lote_id == ap.lote_id,
-                    Vacinacao.vacina == item.vacina,
-                    Vacinacao.data >= data_prevista - timedelta(days=5),
-                    Vacinacao.data <= data_prevista + timedelta(days=5)
-                ).first() is not None
+                ja_aplicada = any(janela_ini <= d <= janela_fim for d in vacinacoes_lote.get((ap.lote_id, item.vacina), []))
             elif ap.plantel_grupo:
-                ja_aplicada = Vacinacao.query.filter(
-                    Vacinacao.plantel_brinco.isnot(None),
-                    Vacinacao.vacina == item.vacina,
-                    Vacinacao.data >= data_prevista - timedelta(days=5),
-                    Vacinacao.data <= data_prevista + timedelta(days=5)
-                ).first() is not None
+                ja_aplicada = any(janela_ini <= d <= janela_fim for d in vacinacoes_plantel.get(item.vacina, []))
 
             if ja_aplicada:
                 status = 'aplicada'
@@ -2921,6 +2956,7 @@ def update_plantel(pid):
         return jsonify({'error': 'Permissão negada'}), 403
     p = Plantel.query.get_or_404(pid)
     data = request.get_json()
+    brinco_antigo = p.brinco
     for f in ['brinco', 'tipo', 'nome', 'raca', 'mossa', 'status', 'origem', 'observacoes']:
         if f in data:
             setattr(p, f, data[f] or None)
@@ -2930,6 +2966,15 @@ def update_plantel(pid):
         p.peso_atual = to_float(data['peso_atual'])
     if 'custo_aquisicao' in data:
         p.custo_aquisicao = to_float(data.get('custo_aquisicao'), 0)
+
+    # Brinco é digitado como texto (não é FK) em Reprodução/Alimentação/Sanidade —
+    # renomear aqui deixaria esses registros "órfãos" se não propagar a mudança.
+    if p.brinco and p.brinco != brinco_antigo:
+        Reproducao.query.filter_by(femea_brinco=brinco_antigo).update({'femea_brinco': p.brinco})
+        Reproducao.query.filter_by(macho_brinco=brinco_antigo).update({'macho_brinco': p.brinco})
+        Alimentacao.query.filter_by(plantel_brinco=brinco_antigo).update({'plantel_brinco': p.brinco})
+        Vacinacao.query.filter_by(plantel_brinco=brinco_antigo).update({'plantel_brinco': p.brinco})
+
     db.session.commit()
     return jsonify(p.to_dict())
 
