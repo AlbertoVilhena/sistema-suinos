@@ -1413,12 +1413,15 @@ def delete_reproducao(rid):
 @app.route('/api/reproducoes/ficha/<string:brinco>', methods=['GET'])
 @jwt_required()
 def ficha_matriz(brinco):
-    """Histórico completo de uma matriz no formato da ficha física (cobertura + parto)."""
+    """Histórico completo de uma matriz no formato da ficha física (cobertura + parto).
+    Alguns registros de reprodução são mais antigos que o cadastro no Plantel (o brinco
+    era digitado livremente antes de existir matriz cadastrada), então a ficha não exige
+    mais que a matriz esteja no Plantel — só que exista brinco ou histórico."""
     matriz = Plantel.query.filter_by(brinco=brinco).first()
-    if not matriz:
-        return jsonify({'error': 'Matriz não encontrada no plantel'}), 404
-
     ciclos = Reproducao.query.filter_by(femea_brinco=brinco).order_by(Reproducao.data_cobertura.asc()).all()
+
+    if not matriz and not ciclos:
+        return jsonify({'error': 'Nenhuma matriz ou registro de reprodução encontrado para este brinco'}), 404
 
     numero_parto = 0
     ciclos_dict = []
@@ -1431,8 +1434,18 @@ def ficha_matriz(brinco):
             d['numero_parto'] = None
         ciclos_dict.append(d)
 
+    if matriz:
+        matriz_dict = matriz.to_dict()
+    else:
+        matriz_dict = {
+            'id': None, 'brinco': brinco, 'tipo': 'matriz', 'nome': '', 'raca': '', 'mossa': '',
+            'data_nascimento': None, 'idade_meses': None, 'peso_atual': None,
+            'status': 'não cadastrada no plantel', 'origem': None, 'custo_aquisicao': 0,
+            'observacoes': '', 'total_partos': numero_parto, 'criado_em': None,
+        }
+
     return jsonify({
-        'matriz': matriz.to_dict(),
+        'matriz': matriz_dict,
         'ciclos': ciclos_dict,
     })
 
