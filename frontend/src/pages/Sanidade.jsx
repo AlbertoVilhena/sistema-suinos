@@ -15,7 +15,7 @@ const faseBadge = { maternidade: 'badge-purple', creche: 'badge-blue', crescimen
 const plantelGrupoLabel = { matrizes: '🐷 Matrizes', reprodutores: '🐗 Reprodutores', geral: '🐖 Plantel Geral' }
 
 const emptyVacForm = {
-  destino_tipo: 'lote', lote_id: '', animal_id: '', plantel_brinco: '',
+  destino_tipo: 'lote', plantel_modo: 'grupo', lote_id: '', animal_id: '', plantel_brinco: '', plantel_grupo: '',
   vacina: '', data: today, dose: '', marca_fabricante: '', lote_vacina: '',
   responsavel: '', custo: '', observacoes: ''
 }
@@ -330,14 +330,14 @@ export default function Sanidade() {
       <h3 style="font-size:13px;font-weight:700;margin:24px 0 8px">🐷 Vacinações do Plantel</h3>
       <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
         <thead><tr style="background:#4a0e8f;color:#fff">
-          <th style="padding:8px 10px;text-align:left;font-size:11px">Animal (Brinco)</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px">Animal / Grupo</th>
           <th style="padding:8px 10px;text-align:center;font-size:11px">Doses</th>
           <th style="padding:8px 10px;text-align:right;font-size:11px">Custo Total</th>
         </tr></thead>
         <tbody>
           ${relatorio.por_plantel.map((p, i) => `
             <tr style="background:${i % 2 === 0 ? '#fff' : '#fafafa'}">
-              <td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:600">🐷 ${p.brinco}</td>
+              <td style="padding:8px 10px;border-bottom:1px solid #eee;font-weight:600">${p.brinco ? `🐷 ${p.brinco}` : (plantelGrupoLabel[p.grupo] || p.grupo)}</td>
               <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center">${p.total_doses}</td>
               <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmtR(p.custo_total)}</td>
             </tr>`).join('')}
@@ -364,7 +364,7 @@ export default function Sanidade() {
               <tr style="background:${i % 2 === 0 ? '#fff' : '#fafafa'}">
                 <td style="padding:6px 8px;border-bottom:1px solid #eee;white-space:nowrap">${fmtDate(v.data)}</td>
                 <td style="padding:6px 8px;border-bottom:1px solid #eee;font-weight:600">${v.vacina}</td>
-                <td style="padding:6px 8px;border-bottom:1px solid #eee">${v.plantel_brinco ? `🐷 ${v.plantel_brinco}` : (v.lote_numero || '-')}</td>
+                <td style="padding:6px 8px;border-bottom:1px solid #eee">${v.plantel_brinco ? `🐷 ${v.plantel_brinco}` : v.plantel_grupo ? (plantelGrupoLabel[v.plantel_grupo] || v.plantel_grupo) : (v.lote_numero || '-')}</td>
                 <td style="padding:6px 8px;border-bottom:1px solid #eee">${v.dose || '-'}</td>
                 <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${v.marca_fabricante || '-'}</td>
                 <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${v.lote_vacina || '-'}</td>
@@ -448,7 +448,11 @@ export default function Sanidade() {
   }
   const openEditVac = (v) => {
     setEditingVac(v)
-    setVacForm({ ...emptyVacForm, ...v, destino_tipo: v.plantel_brinco ? 'plantel' : 'lote' })
+    setVacForm({
+      ...emptyVacForm, ...v,
+      destino_tipo: (v.plantel_brinco || v.plantel_grupo) ? 'plantel' : 'lote',
+      plantel_modo: v.plantel_brinco ? 'individual' : 'grupo',
+    })
     setVacError('')
     setShowVacModal(true)
   }
@@ -457,9 +461,15 @@ export default function Sanidade() {
     setSavingVac(true)
     try {
       const payload = { ...vacForm }
-      if (payload.destino_tipo === 'plantel') { payload.lote_id = ''; payload.animal_id = '' }
-      else { payload.plantel_brinco = '' }
+      if (payload.destino_tipo === 'plantel') {
+        payload.lote_id = ''; payload.animal_id = ''
+        if (payload.plantel_modo === 'individual') payload.plantel_grupo = ''
+        else payload.plantel_brinco = ''
+      } else {
+        payload.plantel_brinco = ''; payload.plantel_grupo = ''
+      }
       delete payload.destino_tipo
+      delete payload.plantel_modo
       if (editingVac) await api.put(`/api/vacinacoes/${editingVac.id}`, payload)
       else await api.post('/api/vacinacoes', payload)
       setShowVacModal(false)
@@ -536,7 +546,10 @@ export default function Sanidade() {
   const filteredVac = vacinacoes.filter(v => {
     const s = search.toLowerCase()
     const matchSearch = !s || v.vacina.toLowerCase().includes(s) || (v.responsavel || '').toLowerCase().includes(s) || (v.lote_numero || '').toLowerCase().includes(s) || (v.plantel_brinco || '').toLowerCase().includes(s)
-    const matchDestino = !filterDestino || (filterDestino === 'plantel' && !!v.plantel_brinco) || String(v.lote_id) === filterDestino
+    const matchDestino = !filterDestino
+      || (filterDestino === 'plantel' && !!(v.plantel_brinco || v.plantel_grupo))
+      || (filterDestino.startsWith('pg:') && v.plantel_grupo === filterDestino.slice(3))
+      || String(v.lote_id) === filterDestino
     return matchSearch && matchDestino
   })
 
@@ -703,8 +716,15 @@ export default function Sanidade() {
                 value={search} onChange={e => setSearch(e.target.value)} />
               <select value={filterDestino} onChange={e => setFilterDestino(e.target.value)}>
                 <option value="">Todos</option>
-                <option value="plantel">🐷 Plantel</option>
-                {lotes.map(l => <option key={l.id} value={String(l.id)}>{l.numero}</option>)}
+                <optgroup label="Plantel Reprodutivo">
+                  <option value="plantel">🐷 Todo o Plantel</option>
+                  <option value="pg:matrizes">🐷 Matrizes (grupo)</option>
+                  <option value="pg:reprodutores">🐗 Reprodutores (grupo)</option>
+                  <option value="pg:geral">Plantel Geral (grupo)</option>
+                </optgroup>
+                <optgroup label="Lotes Comerciais">
+                  {lotes.map(l => <option key={l.id} value={String(l.id)}>{l.numero}</option>)}
+                </optgroup>
               </select>
             </div>
             <span style={{ fontSize: 13, color: '#6c757d' }}>{filteredVac.length} registro(s)</span>
@@ -726,6 +746,8 @@ export default function Sanidade() {
                   <td data-label="Destino">
                     {v.plantel_brinco
                       ? <span className="badge badge-purple">🐷 {v.plantel_brinco}</span>
+                      : v.plantel_grupo
+                      ? <span className="badge badge-purple">{plantelGrupoLabel[v.plantel_grupo] || v.plantel_grupo}</span>
                       : v.lote_numero || '-'}
                   </td>
                   <td data-label="Dose">{v.dose || '-'}</td>
@@ -900,11 +922,11 @@ export default function Sanidade() {
                   <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>🐷 Vacinações do Plantel</h3>
                   <div className="table-container">
                     <table>
-                      <thead><tr><th>Animal (Brinco)</th><th>Doses</th><th>Custo Total</th></tr></thead>
+                      <thead><tr><th>Animal / Grupo</th><th>Doses</th><th>Custo Total</th></tr></thead>
                       <tbody>
                         {relatorio.por_plantel.map((p, i) => (
                           <tr key={i}>
-                            <td data-label="Animal"><strong>🐷 {p.brinco}</strong></td>
+                            <td data-label="Animal"><strong>{p.brinco ? `🐷 ${p.brinco}` : (plantelGrupoLabel[p.grupo] || p.grupo)}</strong></td>
                             <td data-label="Doses">{p.total_doses}</td>
                             <td data-label="Custo">{fmtMoeda(p.custo_total)}</td>
                           </tr>
@@ -931,7 +953,11 @@ export default function Sanidade() {
                           <td data-label="Data">{fmtData(v.data)}</td>
                           <td data-label="Vacina"><strong>{v.vacina}</strong></td>
                           <td data-label="Destino">
-                            {v.plantel_brinco ? <span className="badge badge-purple">🐷 {v.plantel_brinco}</span> : v.lote_numero || '-'}
+                            {v.plantel_brinco
+                              ? <span className="badge badge-purple">🐷 {v.plantel_brinco}</span>
+                              : v.plantel_grupo
+                              ? <span className="badge badge-purple">{plantelGrupoLabel[v.plantel_grupo] || v.plantel_grupo}</span>
+                              : v.lote_numero || '-'}
                           </td>
                           <td data-label="Dose">{v.dose || '-'}</td>
                           <td data-label="Marca">{v.marca_fabricante || '-'}</td>
@@ -961,7 +987,7 @@ export default function Sanidade() {
                 <button type="button" className={`btn btn-sm ${vacForm.destino_tipo === 'lote' ? 'btn-primary' : 'btn-outline'}`}
                   onClick={() => setVF('destino_tipo', 'lote')}>🐖 Lote Comercial</button>
                 <button type="button" className={`btn btn-sm ${vacForm.destino_tipo === 'plantel' ? 'btn-primary' : 'btn-outline'}`}
-                  onClick={() => setVF('destino_tipo', 'plantel')}>🐷 Animal do Plantel</button>
+                  onClick={() => setVF('destino_tipo', 'plantel')}>🐷 Plantel Reprodutivo</button>
               </div>
             </div>
             {vacForm.destino_tipo === 'lote' ? (
@@ -973,29 +999,52 @@ export default function Sanidade() {
                 </select>
               </div>
             ) : (
-              <div className="form-group">
-                <label>Animal do Plantel *</label>
-                <select value={vacForm.plantel_brinco} onChange={e => setVF('plantel_brinco', e.target.value)}>
-                  <option value="">Selecione o animal</option>
-                  <optgroup label="Matrizes">
-                    {plantel.filter(p => p.tipo === 'matriz').map(p => (
-                      <option key={p.id} value={p.brinco}>{p.brinco}{p.nome ? ` — ${p.nome}` : ''}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Reprodutores">
-                    {plantel.filter(p => p.tipo === 'reprodutor').map(p => (
-                      <option key={p.id} value={p.brinco}>{p.brinco}{p.nome ? ` — ${p.nome}` : ''}</option>
-                    ))}
-                  </optgroup>
-                </select>
-                {plantelAnimal && (
-                  <div style={{ fontSize: 12, color: '#6f42c1', marginTop: 4 }}>
-                    {plantelAnimal.tipo === 'matriz' ? '🐷' : '🐗'} {plantelAnimal.tipo === 'matriz' ? 'Matriz' : 'Reprodutor'}
-                    {plantelAnimal.raca ? ` · ${plantelAnimal.raca}` : ''}
-                    {plantelAnimal.idade_meses ? ` · ${plantelAnimal.idade_meses} meses` : ''}
+              <>
+                <div className="form-group span-2">
+                  <label>Tipo de registro</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="button" className={`btn btn-sm ${vacForm.plantel_modo === 'grupo' ? 'btn-primary' : 'btn-outline'}`}
+                      onClick={() => setVacForm(f => ({ ...f, plantel_modo: 'grupo', plantel_brinco: '' }))}>👥 Grupo</button>
+                    <button type="button" className={`btn btn-sm ${vacForm.plantel_modo === 'individual' ? 'btn-primary' : 'btn-outline'}`}
+                      onClick={() => setVacForm(f => ({ ...f, plantel_modo: 'individual', plantel_grupo: '' }))}>👤 Animal Individual</button>
+                  </div>
+                </div>
+                {vacForm.plantel_modo === 'grupo' ? (
+                  <div className="form-group">
+                    <label>Grupo do Plantel *</label>
+                    <select value={vacForm.plantel_grupo} onChange={e => setVF('plantel_grupo', e.target.value)}>
+                      <option value="">Selecione o grupo</option>
+                      <option value="matrizes">🐷 Matrizes</option>
+                      <option value="reprodutores">🐗 Reprodutores</option>
+                      <option value="geral">🐖 Plantel Geral</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="form-group">
+                    <label>Animal do Plantel *</label>
+                    <select value={vacForm.plantel_brinco} onChange={e => setVF('plantel_brinco', e.target.value)}>
+                      <option value="">Selecione o animal</option>
+                      <optgroup label="Matrizes">
+                        {plantel.filter(p => p.tipo === 'matriz').map(p => (
+                          <option key={p.id} value={p.brinco}>{p.brinco}{p.nome ? ` — ${p.nome}` : ''}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Reprodutores">
+                        {plantel.filter(p => p.tipo === 'reprodutor').map(p => (
+                          <option key={p.id} value={p.brinco}>{p.brinco}{p.nome ? ` — ${p.nome}` : ''}</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                    {plantelAnimal && (
+                      <div style={{ fontSize: 12, color: '#6f42c1', marginTop: 4 }}>
+                        {plantelAnimal.tipo === 'matriz' ? '🐷' : '🐗'} {plantelAnimal.tipo === 'matriz' ? 'Matriz' : 'Reprodutor'}
+                        {plantelAnimal.raca ? ` · ${plantelAnimal.raca}` : ''}
+                        {plantelAnimal.idade_meses ? ` · ${plantelAnimal.idade_meses} meses` : ''}
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
+              </>
             )}
             <div className="form-group">
               <label>Data *</label>

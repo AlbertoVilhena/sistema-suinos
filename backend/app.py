@@ -162,6 +162,7 @@ class Vacinacao(db.Model):
     lote_id = db.Column(db.Integer, db.ForeignKey('lotes.id'))
     animal_id = db.Column(db.Integer, db.ForeignKey('animais.id'), nullable=True)
     plantel_brinco = db.Column(db.String(50))
+    plantel_grupo = db.Column(db.String(20))  # matrizes, reprodutores, geral — aplicação em grupo, sem animal individual
     vacina = db.Column(db.String(100), nullable=False)
     data = db.Column(db.Date, nullable=False)
     dose = db.Column(db.String(50))
@@ -179,6 +180,7 @@ class Vacinacao(db.Model):
             'lote_numero': self.lote.numero if self.lote else None,
             'animal_id': self.animal_id,
             'plantel_brinco': self.plantel_brinco,
+            'plantel_grupo': self.plantel_grupo,
             'vacina': self.vacina,
             'data': self.data.isoformat() if self.data else None,
             'dose': self.dose,
@@ -969,13 +971,14 @@ def create_vacinacao():
     data = request.get_json()
     if not data.get('vacina') or not data.get('data'):
         return jsonify({'error': 'Vacina e data são obrigatórios'}), 400
-    if not data.get('lote_id') and not data.get('plantel_brinco'):
-        return jsonify({'error': 'Selecione um lote ou um animal do plantel'}), 400
+    if not data.get('lote_id') and not data.get('plantel_brinco') and not data.get('plantel_grupo'):
+        return jsonify({'error': 'Selecione um lote, um grupo do plantel ou um animal do plantel'}), 400
 
     vac = Vacinacao(
         lote_id=to_int(data.get('lote_id')),
         animal_id=to_int(data.get('animal_id')),
         plantel_brinco=data.get('plantel_brinco') or None,
+        plantel_grupo=data.get('plantel_grupo') or None,
         vacina=data['vacina'],
         data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
         dose=data.get('dose'),
@@ -1000,7 +1003,7 @@ def update_vacinacao(vid):
     vac = Vacinacao.query.get_or_404(vid)
     data = request.get_json()
 
-    for f in ['vacina', 'dose', 'marca_fabricante', 'lote_vacina', 'responsavel', 'custo', 'observacoes', 'lote_id', 'animal_id', 'plantel_brinco']:
+    for f in ['vacina', 'dose', 'marca_fabricante', 'lote_vacina', 'responsavel', 'custo', 'observacoes', 'lote_id', 'animal_id', 'plantel_brinco', 'plantel_grupo']:
         if f in data:
             setattr(vac, f, data[f] if data[f] != '' else None)
     if 'data' in data:
@@ -1059,14 +1062,17 @@ def relatorio_vacinacao():
         if v.vacina not in por_lote[key]['vacinas']:
             por_lote[key]['vacinas'].append(v.vacina)
 
-    # Agrupado por plantel
+    # Agrupado por plantel (animal individual ou grupo — matrizes/reprodutores/geral)
     por_plantel = {}
     for v in vacinacoes:
-        if not v.plantel_brinco:
+        if v.plantel_brinco:
+            key = ('brinco', v.plantel_brinco)
+        elif v.plantel_grupo:
+            key = ('grupo', v.plantel_grupo)
+        else:
             continue
-        key = v.plantel_brinco
         if key not in por_plantel:
-            por_plantel[key] = {'brinco': key, 'total_doses': 0, 'custo_total': 0, 'registros': []}
+            por_plantel[key] = {'brinco': v.plantel_brinco, 'grupo': v.plantel_grupo, 'total_doses': 0, 'custo_total': 0, 'registros': []}
         por_plantel[key]['total_doses'] += 1
         por_plantel[key]['custo_total'] += v.custo or 0
         por_plantel[key]['registros'].append(v.to_dict())
@@ -1090,7 +1096,7 @@ def relatorio_vacinacao():
             vacinacoes_lote.setdefault((lid, vacina), []).append(data_v)
     vacinacoes_plantel = {}
     for vacina, data_v in db.session.query(Vacinacao.vacina, Vacinacao.data) \
-            .filter(Vacinacao.plantel_brinco.isnot(None)).all():
+            .filter(db.or_(Vacinacao.plantel_brinco.isnot(None), Vacinacao.plantel_grupo.isnot(None))).all():
         vacinacoes_plantel.setdefault(vacina, []).append(data_v)
 
     for ap in aplicacoes:
@@ -1282,7 +1288,7 @@ def get_agenda_vacinacao():
 
     vacinacoes_plantel = {}
     for vacina, data_v in db.session.query(Vacinacao.vacina, Vacinacao.data) \
-            .filter(Vacinacao.plantel_brinco.isnot(None)).all():
+            .filter(db.or_(Vacinacao.plantel_brinco.isnot(None), Vacinacao.plantel_grupo.isnot(None))).all():
         vacinacoes_plantel.setdefault(vacina, []).append(data_v)
 
     for ap in aplicacoes:
@@ -3059,6 +3065,7 @@ def init_db():
             "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_grupo VARCHAR(20)",
             "ALTER TABLE alimentacoes ADD COLUMN IF NOT EXISTS plantel_brinco VARCHAR(50)",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS plantel_brinco VARCHAR(50)",
+            "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS plantel_grupo VARCHAR(20)",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS custo FLOAT DEFAULT 0",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS marca_fabricante VARCHAR(100)",
             "ALTER TABLE vacinacoes ADD COLUMN IF NOT EXISTS lote_vacina VARCHAR(50)",
@@ -3068,6 +3075,7 @@ def init_db():
             "CREATE INDEX IF NOT EXISTS idx_vacinacoes_lote_id ON vacinacoes(lote_id)",
             "CREATE INDEX IF NOT EXISTS idx_vacinacoes_data ON vacinacoes(data)",
             "CREATE INDEX IF NOT EXISTS idx_vacinacoes_plantel_brinco ON vacinacoes(plantel_brinco)",
+            "CREATE INDEX IF NOT EXISTS idx_vacinacoes_plantel_grupo ON vacinacoes(plantel_grupo)",
             "CREATE INDEX IF NOT EXISTS idx_alimentacoes_lote_id ON alimentacoes(lote_id)",
             "CREATE INDEX IF NOT EXISTS idx_alimentacoes_data ON alimentacoes(data)",
             "CREATE INDEX IF NOT EXISTS idx_alimentacoes_plantel_grupo ON alimentacoes(plantel_grupo)",
