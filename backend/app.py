@@ -221,6 +221,18 @@ class Reproducao(db.Model):
     quantidade_desmamados = db.Column(db.Integer)
     peso_medio_desmame = db.Column(db.Float)
     idade_desmame = db.Column(db.Integer)
+    # Custo de ração acumulado durante a gestação (lançado pela Produção de Ração)
+    custo_racao_gestacao = db.Column(db.Float, default=0)
+    custo_por_nascido = db.Column(db.Float)
+
+    def recalcular_custo_por_nascido(self):
+        """Divide o custo de ração da gestação pelos leitões ainda vivos.
+        Recalcula automaticamente se houver mortalidade registrada no desmame."""
+        vivos_atuais = (self.quantidade_vivos or 0) - (self.quantidade_mortos_desmame or 0)
+        if self.custo_racao_gestacao and vivos_atuais > 0:
+            self.custo_por_nascido = round(self.custo_racao_gestacao / vivos_atuais, 2)
+        else:
+            self.custo_por_nascido = None
 
     def to_dict(self):
         return {
@@ -248,6 +260,8 @@ class Reproducao(db.Model):
             'quantidade_desmamados': self.quantidade_desmamados,
             'peso_medio_desmame': self.peso_medio_desmame,
             'idade_desmame': self.idade_desmame,
+            'custo_racao_gestacao': round(self.custo_racao_gestacao or 0, 2),
+            'custo_por_nascido': round(self.custo_por_nascido, 2) if self.custo_por_nascido is not None else None,
         }
 
 
@@ -1390,6 +1404,7 @@ def create_reproducao():
         peso_medio_desmame=to_float(data.get('peso_medio_desmame')),
         idade_desmame=to_int(data.get('idade_desmame')),
     )
+    rep.recalcular_custo_por_nascido()
     db.session.add(rep)
     db.session.commit()
     return jsonify(rep.to_dict()), 201
@@ -1434,6 +1449,7 @@ def update_reproducao(rid):
     if 'data_parto_real' in data and data['data_parto_real']:
         rep.data_parto_real = datetime.strptime(data['data_parto_real'], '%Y-%m-%d').date()
 
+    rep.recalcular_custo_por_nascido()
     db.session.commit()
     return jsonify(rep.to_dict())
 
@@ -1489,6 +1505,36 @@ def ficha_matriz(brinco):
         'matriz': matriz_dict,
         'ciclos': ciclos_dict,
     })
+
+
+@app.route('/api/reproducoes/gestantes', methods=['GET'])
+@jwt_required()
+def get_gestantes_ativas():
+    """Matrizes atualmente em gestação, para seleção individual na Produção de Ração
+    (o custo de cada uma é acumulado em custo_racao_gestacao e dividido pelos nascidos vivos no parto)."""
+    hoje = date.today()
+    gestacoes = Reproducao.query.filter_by(status='gestacao').order_by(Reproducao.data_cobertura.asc()).all()
+    plantel_by_brinco = {p.brinco: p for p in Plantel.query.filter(
+        Plantel.brinco.in_([g.femea_brinco for g in gestacoes if g.femea_brinco])
+    ).all()} if gestacoes else {}
+
+    resultado = []
+    for g in gestacoes:
+        if not g.femea_brinco:
+            continue
+        dias_gestacao = (hoje - g.data_cobertura).days if g.data_cobertura else None
+        pre_parto = bool(g.data_parto_previsto and (g.data_parto_previsto - hoje).days <= 10)
+        p = plantel_by_brinco.get(g.femea_brinco)
+        resultado.append({
+            'reproducao_id': g.id,
+            'brinco': g.femea_brinco,
+            'nome': p.nome if p else None,
+            'dias_gestacao': dias_gestacao,
+            'data_parto_previsto': g.data_parto_previsto.isoformat() if g.data_parto_previsto else None,
+            'fase': 'pre_parto' if pre_parto else 'gestacao',
+            'custo_racao_gestacao': round(g.custo_racao_gestacao or 0, 2),
+        })
+    return jsonify(resultado)
 
 
 @app.route('/api/relatorios/reproducao', methods=['GET'])
@@ -2219,6 +2265,43 @@ def delete_formulacao(fid):
     return jsonify({'message': 'Formulação excluída'})
 
 
+def _registrar_racao_destino(destino, data_ref, formulacao_id, racao_tipo, custo_unitario, observacoes):
+    """Cria o lançamento de Alimentação correspondente a um destino escolhido na Produção
+    de Ração e, se o destino for uma matriz gestante individual, acumula o custo na
+    gestação (Reproducao.custo_racao_gestacao) para ratear pelos nascidos vivos no parto."""
+    quantidade_kg = to_float(destino.get('quantidade_kg'))
+    if not quantidade_kg or quantidade_kg <= 0:
+        return None
+
+    lote_id = to_int(destino.get('lote_id'))
+    plantel_grupo = destino.get('plantel_grupo') or None
+    plantel_brinco = destino.get('plantel_brinco') or None
+    if not lote_id and not plantel_grupo and not plantel_brinco:
+        return None
+
+    alim = Alimentacao(
+        lote_id=lote_id,
+        plantel_grupo=plantel_grupo,
+        plantel_brinco=plantel_brinco,
+        formulacao_id=formulacao_id,
+        data=data_ref,
+        racao_tipo=racao_tipo,
+        quantidade_kg=quantidade_kg,
+        custo_unitario=custo_unitario,
+        observacoes=observacoes,
+    )
+    db.session.add(alim)
+
+    if plantel_brinco:
+        rep = Reproducao.query.filter_by(femea_brinco=plantel_brinco, status='gestacao') \
+            .order_by(Reproducao.id.desc()).first()
+        if rep:
+            rep.custo_racao_gestacao = round((rep.custo_racao_gestacao or 0) + quantidade_kg * (custo_unitario or 0), 2)
+            rep.recalcular_custo_por_nascido()
+
+    return alim
+
+
 @app.route('/api/formulacoes/<int:fid>/produzir', methods=['POST'])
 @jwt_required()
 def produzir_formulacao(fid):
@@ -2235,24 +2318,43 @@ def produzir_formulacao(fid):
     if not data.get('data'):
         return jsonify({'error': 'Data é obrigatória'}), 400
 
+    destinos = data.get('destinos') or []
+    total_destinado = round(sum(to_float(d.get('quantidade_kg')) or 0 for d in destinos), 3)
+    if total_destinado > quantidade_kg + 0.001:
+        return jsonify({'error': 'A soma dos destinos não pode ser maior que a quantidade produzida'}), 400
+
     # Calcula custo/kg com preços atuais dos ingredientes
     custo_atual_por_kg = 0
     for item in formulacao.itens:
         ing = Ingrediente.query.get(item.ingrediente_id)
         if ing:
             custo_atual_por_kg += (item.percentagem / 100) * (ing.custo_por_kg or 0)
+    custo_atual_por_kg = round(custo_atual_por_kg, 4)
+
+    data_producao = datetime.strptime(data['data'], '%Y-%m-%d').date()
 
     # Cria registro de Produção (estoque de ração pronta)
     prod = ProducaoRacao(
         formulacao_id=fid,
         formulacao_nome=formulacao.nome,
         quantidade_kg=quantidade_kg,
-        quantidade_usada_kg=0,
-        data=datetime.strptime(data['data'], '%Y-%m-%d').date(),
-        custo_por_kg=round(custo_atual_por_kg, 4),
+        quantidade_usada_kg=total_destinado,
+        data=data_producao,
+        custo_por_kg=custo_atual_por_kg,
         observacoes=data.get('observacoes') or f'Produção: {formulacao.nome}'
     )
     db.session.add(prod)
+    db.session.flush()
+
+    # Lança o custo direto nos lotes/grupos/matrizes escolhidos como destino desta produção
+    alimentacoes_criadas = []
+    for destino in destinos:
+        alim = _registrar_racao_destino(
+            destino, data_producao, fid, formulacao.nome, custo_atual_por_kg,
+            f'Produção #{prod.id}: {formulacao.nome}'
+        )
+        if alim:
+            alimentacoes_criadas.append(alim)
 
     # Deduz estoque de ingredientes se solicitado
     if data.get('deduzir_estoque'):
@@ -2263,7 +2365,9 @@ def produzir_formulacao(fid):
                 ing.estoque_kg = max(0, (ing.estoque_kg or 0) - qty_necessaria)
 
     db.session.commit()
-    return jsonify(prod.to_dict()), 201
+    resultado = prod.to_dict()
+    resultado['alimentacoes_criadas'] = [a.to_dict() for a in alimentacoes_criadas]
+    return jsonify(resultado), 201
 
 
 # ============== DASHBOARD ==============
@@ -3111,6 +3215,9 @@ def init_db():
             "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS peso_medio_desmame FLOAT",
             "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS idade_desmame INTEGER",
             "ALTER TABLE plantel ADD COLUMN IF NOT EXISTS mossa VARCHAR(50)",
+            # --- Custo de ração por matriz na gestação (lançado na Produção de Ração) ---
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS custo_racao_gestacao FLOAT DEFAULT 0",
+            "ALTER TABLE reproducoes ADD COLUMN IF NOT EXISTS custo_por_nascido FLOAT",
         ]
         with db.engine.connect() as conn:
             for sql in migrations:

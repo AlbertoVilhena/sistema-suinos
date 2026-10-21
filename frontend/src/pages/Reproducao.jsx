@@ -386,12 +386,13 @@ export default function Reproducao() {
                   <thead>
                     <tr>
                       <th>Data Cobertura</th><th>Nº Macho</th><th>Nº Montas</th>
-                      <th>Retorno do Cio</th><th>Parto Previsto</th><th>Vacinas</th><th>Observações</th>
+                      <th>Retorno do Cio</th><th>Parto Previsto</th><th>Vacinas</th>
+                      <th>Custo Ração Gest.</th><th>Observações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {ficha.ciclos.length === 0 ? (
-                      <tr><td colSpan={7} className="table-empty">Nenhuma cobertura registrada</td></tr>
+                      <tr><td colSpan={8} className="table-empty">Nenhuma cobertura registrada</td></tr>
                     ) : ficha.ciclos.map(c => (
                       <tr key={c.id}>
                         <td>{fmtData(c.data_cobertura)}</td>
@@ -400,6 +401,7 @@ export default function Reproducao() {
                         <td>{fmtData(c.data_retorno_cio)}</td>
                         <td>{fmtData(c.data_parto_previsto)}</td>
                         <td>{c.vacinas || '-'}</td>
+                        <td>{c.custo_racao_gestacao ? `R$ ${c.custo_racao_gestacao.toFixed(2)}` : '-'}</td>
                         <td>{c.observacoes || '-'}</td>
                       </tr>
                     ))}
@@ -414,12 +416,12 @@ export default function Reproducao() {
                     <tr>
                       <th>Nº Parto</th><th>Data</th><th>Vivos</th><th>Natim.</th><th>Mumif.</th><th>Total</th>
                       <th>Peso Nascim.</th><th>Trans.</th><th>Mortos Desm.</th><th>Desmamados</th>
-                      <th>Peso Desmame</th><th>Idade Desmame</th>
+                      <th>Peso Desmame</th><th>Idade Desmame</th><th>Custo Ração Gest.</th><th>Custo/Leitão</th>
                     </tr>
                   </thead>
                   <tbody>
                     {ficha.ciclos.filter(c => c.numero_parto).length === 0 ? (
-                      <tr><td colSpan={12} className="table-empty">Nenhum parto registrado</td></tr>
+                      <tr><td colSpan={14} className="table-empty">Nenhum parto registrado</td></tr>
                     ) : ficha.ciclos.filter(c => c.numero_parto).map(c => (
                       <tr key={c.id}>
                         <td>{c.numero_parto}</td>
@@ -434,6 +436,8 @@ export default function Reproducao() {
                         <td>{c.quantidade_desmamados ?? '-'}</td>
                         <td>{c.peso_medio_desmame ? `${c.peso_medio_desmame} kg` : '-'}</td>
                         <td>{c.idade_desmame != null ? `${c.idade_desmame}d` : '-'}</td>
+                        <td>{c.custo_racao_gestacao ? `R$ ${c.custo_racao_gestacao.toFixed(2)}` : '-'}</td>
+                        <td>{c.custo_por_nascido != null ? `R$ ${c.custo_por_nascido.toFixed(2)}` : '-'}</td>
                       </tr>
                     ))}
                   </tbody>

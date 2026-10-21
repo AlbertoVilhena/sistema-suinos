@@ -46,6 +46,8 @@ export default function Formulacao() {
   const [producaoForm, setProducaoForm] = useState({ quantidade_kg: '', data: today, deduzir_estoque: true, observacoes: '' })
   const [savingProducao, setSavingProducao] = useState(false)
   const [producaoError, setProducaoError] = useState('')
+  const [destinoRows, setDestinoRows] = useState([])
+  const [destinosLoading, setDestinosLoading] = useState(false)
 
   // Estoque import
   const [showImportModal, setShowImportModal] = useState(false)
@@ -170,22 +172,61 @@ export default function Formulacao() {
     } finally { setImportando(false) }
   }
 
-  const openProducao = (f) => {
+  const openProducao = async (f) => {
     setProducaoTarget(f)
     setProducaoForm({ quantidade_kg: '', data: today, deduzir_estoque: true, observacoes: '' })
     setProducaoError('')
+    setDestinoRows([])
     setShowProducaoModal(true)
+    setDestinosLoading(true)
+    try {
+      const [rDiaria, rGestantes] = await Promise.all([
+        api.get('/api/alimentacao/diaria'),
+        api.get('/api/reproducoes/gestantes'),
+      ])
+      const rows = []
+      for (const d of rDiaria.data.destinos) {
+        if (d.tipo === 'lote') {
+          rows.push({ chave: `lote-${d.id}`, label: `Lote ${d.nome} (${d.fase_label})`, lote_id: d.id, kg: d.kg_sugerido, checked: false })
+        } else if (d.id === 'matrizes_gestacao') {
+          // Gestantes individuais: custo rateado pelos nascidos vivos no parto
+          for (const g of rGestantes.data.filter(x => x.fase === 'gestacao')) {
+            rows.push({ chave: `matriz-${g.brinco}`, label: `🤰 Matriz ${g.brinco} (gestação, dia ${g.dias_gestacao ?? '?'})`, plantel_brinco: g.brinco, kg: d.kg_dia_referencia, checked: false })
+          }
+        } else if (d.id === 'matrizes_pre_parto') {
+          for (const g of rGestantes.data.filter(x => x.fase === 'pre_parto')) {
+            rows.push({ chave: `matriz-${g.brinco}`, label: `🏥 Matriz ${g.brinco} (pré-parto)`, plantel_brinco: g.brinco, kg: d.kg_dia_referencia, checked: false })
+          }
+        } else {
+          rows.push({ chave: `plantel-${d.id}`, label: d.nome, plantel_grupo: d.id, kg: d.kg_sugerido, checked: false })
+        }
+      }
+      setDestinoRows(rows)
+    } catch (e) {
+      toast.error('Erro ao carregar sugestões de destino')
+    } finally { setDestinosLoading(false) }
   }
+
+  const toggleDestino = (chave) => setDestinoRows(rows => rows.map(r => r.chave === chave ? { ...r, checked: !r.checked } : r))
+  const setDestinoKg = (chave, kg) => setDestinoRows(rows => rows.map(r => r.chave === chave ? { ...r, kg } : r))
+
+  const totalDestinadoKg = destinoRows.filter(r => r.checked).reduce((s, r) => s + (parseFloat(r.kg) || 0), 0)
 
   const handleProduzir = async () => {
     setProducaoError('')
     setSavingProducao(true)
     try {
-      const payload = { ...producaoForm }
-      await api.post(`/api/formulacoes/${producaoTarget.id}/produzir`, payload)
+      const destinos = destinoRows.filter(r => r.checked && parseFloat(r.kg) > 0).map(r => ({
+        lote_id: r.lote_id, plantel_grupo: r.plantel_grupo, plantel_brinco: r.plantel_brinco, quantidade_kg: parseFloat(r.kg)
+      }))
+      const payload = { ...producaoForm, destinos }
+      const res = await api.post(`/api/formulacoes/${producaoTarget.id}/produzir`, payload)
       setShowProducaoModal(false)
       load()
-      toast.success(`✅ ${producaoForm.quantidade_kg} kg de "${producaoTarget.nome}" adicionados ao estoque de ração pronta`)
+      const nCriados = res.data.alimentacoes_criadas?.length || 0
+      toast.success(nCriados > 0
+        ? `✅ ${producaoForm.quantidade_kg} kg produzidos — custo já lançado em ${nCriados} destino(s)`
+        : `✅ ${producaoForm.quantidade_kg} kg de "${producaoTarget.nome}" adicionados ao estoque de ração pronta`)
     } catch (e) {
       setProducaoError(e.response?.data?.error || 'Erro ao registrar produção')
     } finally { setSavingProducao(false) }
@@ -520,6 +561,42 @@ export default function Formulacao() {
                 <input value={producaoForm.observacoes} onChange={e => setPF('observacoes', e.target.value)}
                   placeholder={`Produção via formulação: ${producaoTarget.nome}`} />
               </div>
+            </div>
+
+            <div style={{ marginTop: 20, borderTop: '1px solid #e9ecef', paddingTop: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <strong>Destinos desta produção</strong>
+                <span style={{ fontSize: 12, color: '#6c757d' }}>
+                  {totalDestinadoKg.toFixed(1)} kg destinados de {producaoForm.quantidade_kg || 0} kg produzidos
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 10 }}>
+                Marque quem vai receber esta ração agora — o custo já é lançado direto no lote/matriz. O que sobrar fica no estoque de ração pronta para uso posterior.
+              </div>
+              {destinosLoading ? (
+                <div className="loading"><div className="spinner" /> Carregando sugestões...</div>
+              ) : destinoRows.length === 0 ? (
+                <div style={{ fontSize: 13, color: '#6c757d' }}>Nenhum lote/grupo ativo encontrado.</div>
+              ) : (
+                <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                  {destinoRows.map(r => (
+                    <div key={r.chave} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}>
+                      <input type="checkbox" checked={r.checked} onChange={() => toggleDestino(r.chave)} style={{ width: 16, height: 16, flexShrink: 0 }} />
+                      <div style={{ flex: 1, fontSize: 13 }}>{r.label}</div>
+                      <input type="number" step="0.1" min="0" value={r.kg}
+                        disabled={!r.checked}
+                        onChange={e => setDestinoKg(r.chave, e.target.value)}
+                        style={{ width: 90 }} />
+                      <span style={{ fontSize: 12, color: '#6c757d', width: 24 }}>kg</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {totalDestinadoKg > parseFloat(producaoForm.quantidade_kg || 0) + 0.001 && (
+                <div style={{ marginTop: 8, padding: '6px 10px', background: '#f8d7da', borderRadius: 6, fontSize: 12, color: '#842029' }}>
+                  ⚠️ A soma dos destinos marcados é maior que a quantidade produzida.
+                </div>
+              )}
             </div>
           </Modal>
         )
