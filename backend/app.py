@@ -845,9 +845,20 @@ def update_lote(lid):
     data = request.get_json()
 
     fase_anterior = lote.fase
-    for f in ['numero', 'quantidade_atual', 'peso_medio_entrada', 'fase', 'status', 'observacoes']:
-        if f in data:
+    # Campos vazios chegam como "" do formulário; numéricos precisam virar None/int/float
+    # (senão o Postgres recusa: invalid input syntax for type double precision: "")
+    for f in ['numero', 'status']:
+        if data.get(f):
             setattr(lote, f, data[f])
+    for f in ['fase', 'observacoes']:
+        if f in data:
+            setattr(lote, f, data[f] or None)
+    if 'quantidade_atual' in data:
+        qa = to_int(data.get('quantidade_atual'))
+        if qa is not None:
+            lote.quantidade_atual = qa
+    if 'peso_medio_entrada' in data:
+        lote.peso_medio_entrada = to_float(data.get('peso_medio_entrada'))
     if 'quantidade_inicial' in data:
         qi = to_int(data.get('quantidade_inicial'))
         if qi and qi > 0:
@@ -858,7 +869,7 @@ def update_lote(lid):
     # Se o usuário informou explicitamente a data_inicio_fase, respeita
     if 'data_inicio_fase' in data and data['data_inicio_fase']:
         lote.data_inicio_fase = datetime.strptime(data['data_inicio_fase'], '%Y-%m-%d').date()
-    elif 'fase' in data and data['fase'] != fase_anterior:
+    elif 'fase' in data and (data['fase'] or None) != fase_anterior:
         # Mudança de fase automática: registra a data de hoje
         lote.data_inicio_fase = date.today()
 
@@ -928,9 +939,14 @@ def update_animal(aid):
     data = request.get_json()
 
     status_anterior = animal.status
-    for f in ['brinco', 'sexo', 'raca', 'peso_entrada', 'peso_atual', 'status', 'origem', 'custo_aquisicao', 'observacoes', 'lote_id']:
+    for f in ['brinco', 'sexo', 'raca', 'status', 'origem', 'observacoes']:
         if f in data:
             setattr(animal, f, data[f])
+    for f in ['peso_entrada', 'peso_atual', 'custo_aquisicao']:
+        if f in data:
+            setattr(animal, f, to_float(data[f]))
+    if 'lote_id' in data:
+        animal.lote_id = to_int(data['lote_id'])
     if data.get('data_nascimento'):
         animal.data_nascimento = datetime.strptime(data['data_nascimento'], '%Y-%m-%d').date()
 
@@ -1537,6 +1553,40 @@ def get_gestantes_ativas():
     return jsonify(resultado)
 
 
+@app.route('/api/reproducoes/ratear-gestacao', methods=['POST'])
+@jwt_required()
+def ratear_gestacao_retroativa():
+    """Credita o custo de ração de dias atrasados (lançamento retroativo do grupo de matrizes
+    gestantes) em cada matriz que estava gestante naquelas datas, e recalcula o custo por leitão."""
+    u = get_current_user()
+    if not can_write(u.role):
+        return jsonify({'error': 'Permissão negada'}), 403
+    data = request.get_json() or {}
+    try:
+        datas = sorted({datetime.strptime(d, '%Y-%m-%d').date() for d in data.get('datas', [])})
+    except ValueError:
+        return jsonify({'error': 'Datas inválidas'}), 400
+    kg_matriz = to_float(data.get('kg_por_matriz_dia'))
+    custo = to_float(data.get('custo_unitario'), 0)
+    if not datas or not kg_matriz or kg_matriz <= 0:
+        return jsonify({'error': 'Informe datas e kg por matriz/dia'}), 400
+    if not custo or custo <= 0:
+        return jsonify({'matrizes_atualizadas': 0, 'aviso': 'Sem custo/kg (escolha uma formulação) — nada a ratear'})
+
+    atualizadas = 0
+    reps = Reproducao.query.filter(Reproducao.data_cobertura.isnot(None), Reproducao.data_cobertura <= datas[-1]).all()
+    for rep in reps:
+        if not rep.data_parto_real and rep.status != 'gestacao':
+            continue
+        dias = sum(1 for d in datas if rep.data_cobertura <= d and (not rep.data_parto_real or d < rep.data_parto_real))
+        if dias:
+            rep.custo_racao_gestacao = round((rep.custo_racao_gestacao or 0) + dias * kg_matriz * custo, 2)
+            rep.recalcular_custo_por_nascido()
+            atualizadas += 1
+    db.session.commit()
+    return jsonify({'matrizes_atualizadas': atualizadas})
+
+
 @app.route('/api/relatorios/reproducao', methods=['GET'])
 @jwt_required()
 def relatorio_reproducao():
@@ -1782,6 +1832,7 @@ def get_alimentacao_diaria():
             'fase': subfase_key,
             'fase_label': subfase_label,
             'peso_medio': peso_medio,
+            'data_entrada': lote.data_entrada.isoformat() if lote.data_entrada else None,
             'quantidade_animais': qtd,
             'kg_sugerido': kg_sugerido,
             'kg_dia_referencia': kg_dia,
@@ -1871,6 +1922,20 @@ def get_alimentacao_diaria():
         'alimentados': sum(1 for d in destinos if d['alimentado_hoje']),
         'pendentes': sum(1 for d in destinos if not d['alimentado_hoje']),
     })
+
+
+@app.route('/api/alimentacao/registradas', methods=['GET'])
+@jwt_required()
+def alimentacoes_registradas():
+    """Pares (destino, data) já lançados no período — usado no lançamento retroativo para não duplicar."""
+    try:
+        ini = datetime.strptime(request.args.get('inicio', ''), '%Y-%m-%d').date()
+        fim = datetime.strptime(request.args.get('fim', ''), '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Informe inicio e fim no formato AAAA-MM-DD'}), 400
+    rows = db.session.query(Alimentacao.lote_id, Alimentacao.plantel_grupo, Alimentacao.data) \
+        .filter(Alimentacao.data >= ini, Alimentacao.data <= fim).distinct().all()
+    return jsonify([{'lote_id': l, 'plantel_grupo': g, 'data': d.isoformat()} for l, g, d in rows])
 
 
 @app.route('/api/alimentacao/bulk', methods=['POST'])
@@ -2077,9 +2142,11 @@ def update_financeiro(fid):
     fin = Financeiro.query.get_or_404(fid)
     data = request.get_json()
 
-    for f in ['tipo', 'categoria', 'descricao', 'lote_id']:
+    for f in ['tipo', 'categoria', 'descricao']:
         if f in data:
             setattr(fin, f, data[f])
+    if 'lote_id' in data:
+        fin.lote_id = to_int(data['lote_id'])
     if 'valor' in data:
         fin.valor = to_float(data.get('valor'))
     if 'data' in data:
@@ -2158,9 +2225,12 @@ def update_ingrediente(iid):
         return jsonify({'error': 'Permissão negada'}), 403
     ing = Ingrediente.query.get_or_404(iid)
     data = request.get_json()
-    for f in ['nome', 'unidade', 'estoque_kg', 'custo_por_kg', 'ativo']:
+    for f in ['nome', 'unidade', 'ativo']:
         if f in data:
             setattr(ing, f, data[f])
+    for f in ['estoque_kg', 'custo_por_kg']:
+        if f in data:
+            setattr(ing, f, to_float(data[f], 0))
     db.session.commit()
     return jsonify(ing.to_dict())
 
@@ -2701,6 +2771,14 @@ def relatorio_lotes():
     receita_map = {r[0]: r[1] or 0 for r in rec_rows}
     despesa_map = {r[0]: r[1] or 0 for r in desp_rows}
 
+    # Leitões nascidos na fazenda: soma o custo de ração da gestação já rateado por matriz
+    # (Reproducao.custo_racao_gestacao) dos partos que originaram o lote.
+    gestacao_por_lote = {
+        lid: (custo or 0) for lid, custo in db.session.query(
+            Reproducao.lote_id, func.sum(Reproducao.custo_racao_gestacao)
+        ).filter(Reproducao.lote_id.isnot(None)).group_by(Reproducao.lote_id).all()
+    }
+
     result = []
     for lote in lotes:
         # Mortalidade: usa contagem real de animais com status='morto' OU diferença inicial-atual
@@ -2730,6 +2808,11 @@ def relatorio_lotes():
             'custo_aquisicao_animais': round(custo_aquisicao, 2),
             'total_operacional': round(custo_total_com_fin, 2),
             'custo_por_animal': round(custo_total_com_fin / qtd_atual, 2) if qtd_atual else 0,
+            'nascido_na_fazenda': lote.id in gestacao_por_lote,
+            'custo_matriz_rateado': round(gestacao_por_lote.get(lote.id, 0), 2),
+            'custo_por_animal_com_matriz': round(
+                (custo_total_com_fin + gestacao_por_lote.get(lote.id, 0)) / qtd_atual, 2
+            ) if qtd_atual else 0,
             'peso_medio_saida': lote.peso_medio_entrada or 0,
             'receita_lote': round(receita_lote, 2),
             'resultado_lote': round(resultado_lote, 2),

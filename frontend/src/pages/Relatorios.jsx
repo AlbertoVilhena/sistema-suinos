@@ -55,6 +55,7 @@ function LoteCard({ l }) {
           { label: 'Receita', value: fmtMoeda(l.receita_lote), color: '#198754' },
           { label: 'Total Custos', value: fmtMoeda(l.total_operacional), color: '#dc3545' },
           { label: 'Custo/Animal', value: fmtMoeda(l.custo_por_animal) },
+          ...(l.nascido_na_fazenda ? [{ label: 'Custo/Animal c/ matriz', value: fmtMoeda(l.custo_por_animal_com_matriz), color: '#6f42c1' }] : []),
           { label: 'Mortalidade', value: `${fmtNum(l.taxa_mortalidade)}%`, color: l.taxa_mortalidade > 5 ? '#dc3545' : '#198754' },
         ].map((m, i) => (
           <div key={i} className="rel-metric-box">
@@ -427,11 +428,11 @@ export default function Relatorios() {
                 <thead><tr style={{ whiteSpace: 'nowrap' }}>
                   <th>Lote</th><th>Fase</th><th>Status</th><th>Qtd Ini.</th><th>Qtd Atual</th>
                   <th>Mortalidade</th><th>Custo Ração</th><th>Custo Sanidade</th><th>Custo Aquisição</th>
-                  <th>Total Custos</th><th>Custo/Animal</th><th>Receita</th><th>Resultado</th>
+                  <th>Total Custos</th><th>Custo/Animal</th><th>Custo/Animal c/ matriz</th><th>Receita</th><th>Resultado</th>
                 </tr></thead>
                 <tbody>
                   {relLotes.length === 0
-                    ? <tr><td colSpan={13} className="table-empty">Nenhum lote cadastrado</td></tr>
+                    ? <tr><td colSpan={14} className="table-empty">Nenhum lote cadastrado</td></tr>
                     : relLotes.map(l => (
                       <tr key={l.id}>
                         <td><strong>{l.numero}</strong><div style={{ fontSize: 11, color: '#6c757d' }}>{fmtData(l.data_entrada)}</div></td>
@@ -445,6 +446,7 @@ export default function Relatorios() {
                         <td>{fmtMoeda(l.custo_aquisicao_animais)}</td>
                         <td style={{ fontWeight: 600 }}>{fmtMoeda(l.total_operacional)}</td>
                         <td>{fmtMoeda(l.custo_por_animal)}</td>
+                        <td style={{ color: '#6f42c1' }}>{l.nascido_na_fazenda ? fmtMoeda(l.custo_por_animal_com_matriz) : '-'}</td>
                         <td style={{ color: '#198754', fontWeight: 600 }}>{fmtMoeda(l.receita_lote)}</td>
                         <td style={{ fontWeight: 700, color: l.resultado_lote >= 0 ? '#198754' : '#dc3545' }}>
                           {l.resultado_lote >= 0 ? '+' : ''}{fmtMoeda(l.resultado_lote)}

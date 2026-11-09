@@ -185,6 +185,108 @@ export default function Alimentacao() {
     setDiariaDate(d.toISOString().split('T')[0])
   }
 
+  // ===== ABA LANÇAR PERÍODO (alimentações atrasadas) =====
+  const ontem = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0] })()
+  const [retroIni, setRetroIni] = useState('')
+  const [retroFim, setRetroFim] = useState(ontem)
+  const [retroRows, setRetroRows] = useState(null)
+  const [retroForms, setRetroForms] = useState([])
+  const [retroLoading, setRetroLoading] = useState(false)
+  const [retroSaving, setRetroSaving] = useState(false)
+
+  const diasDoPeriodo = (ini, fim) => {
+    const out = []
+    const d = new Date(ini + 'T12:00:00')
+    const f = new Date(fim + 'T12:00:00')
+    while (d <= f) { out.push(d.toISOString().split('T')[0]); d.setDate(d.getDate() + 1) }
+    return out
+  }
+
+  const loadRetro = async () => {
+    if (!retroIni || !retroFim || retroIni > retroFim) { toast.warning('Informe um período válido (data inicial até a final)'); return }
+    setRetroLoading(true)
+    try {
+      const [rd, rr] = await Promise.all([
+        api.get(`/api/alimentacao/diaria?data=${today}`),
+        api.get(`/api/alimentacao/registradas?inicio=${retroIni}&fim=${retroFim}`),
+      ])
+      const feitos = {}
+      rr.data.forEach(x => {
+        const k = x.lote_id ? `lote-${x.lote_id}` : `plantel-${x.plantel_grupo}`
+        if (!feitos[k]) feitos[k] = new Set()
+        feitos[k].add(x.data)
+      })
+      const todos = diasDoPeriodo(retroIni, retroFim)
+      setRetroForms(rd.data.formulacoes)
+      setRetroRows(rd.data.destinos.map(d => {
+        const key = d.tipo === 'lote' ? `lote-${d.id}` : `plantel-${d.id}`
+        const dias = todos.filter(dia => !(feitos[key] && feitos[key].has(dia)) && !(d.data_entrada && dia < d.data_entrada))
+        return {
+          key, d, dias,
+          kg: String(d.kg_sugerido),
+          formulacao_id: String(d.formulacao_sugerida_id || ''),
+          include: dias.length > 0,
+        }
+      }))
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Erro ao carregar destinos')
+    } finally { setRetroLoading(false) }
+  }
+
+  const setRetroRow = (key, field, value) =>
+    setRetroRows(rows => rows.map(r => r.key === key ? { ...r, [field]: value } : r))
+
+  const kgNum = (v) => parseFloat(String(v).replace(',', '.'))
+
+  const lancarRetro = async () => {
+    const registros = []
+    retroRows.forEach(r => {
+      if (!r.include) return
+      const kg = kgNum(r.kg)
+      if (!kg || kg <= 0) return
+      const fid = r.formulacao_id ? parseInt(r.formulacao_id) : null
+      const f = fid ? retroForms.find(x => x.id === fid) : null
+      r.dias.forEach(dia => {
+        const reg = {
+          data: dia, quantidade_kg: kg, formulacao_id: fid,
+          racao_tipo: f?.nome || null, custo_unitario: f ? f.custo_por_kg : null,
+          observacoes: 'Lançamento retroativo',
+        }
+        if (r.d.tipo === 'lote') reg.lote_id = r.d.id
+        else reg.plantel_grupo = r.d.id
+        registros.push(reg)
+      })
+    })
+    if (!registros.length) { toast.warning('Nada a lançar: marque ao menos um destino com kg/dia informado.'); return }
+    if (!await confirm(`Lançar ${registros.length} registros de alimentação no período ${fmtData(retroIni)} a ${fmtData(retroFim)}?`)) return
+    setRetroSaving(true)
+    try {
+      for (let i = 0; i < registros.length; i += 500) {
+        await api.post('/api/alimentacao/bulk', { registros: registros.slice(i, i + 500) })
+      }
+      // Matrizes gestantes: credita também o custo individual de cada matriz (rateio por leitão no parto)
+      let rateadas = 0
+      for (const r of retroRows) {
+        const kg = kgNum(r.kg)
+        if (!r.include || !kg || kg <= 0 || !['matrizes_gestacao', 'matrizes_pre_parto'].includes(r.d.id)) continue
+        const f = r.formulacao_id ? retroForms.find(x => x.id === parseInt(r.formulacao_id)) : null
+        if (!f || !r.d.quantidade_animais) continue
+        const res = await api.post('/api/reproducoes/ratear-gestacao', {
+          datas: r.dias, kg_por_matriz_dia: kg / r.d.quantidade_animais, custo_unitario: f.custo_por_kg,
+        })
+        rateadas += res.data.matrizes_atualizadas || 0
+      }
+      toast.success(`✅ ${registros.length} registros lançados!${rateadas ? ` Custo creditado em ${rateadas} gestação(ões).` : ''}`)
+      await loadRetro()
+      reloadAlims()
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Erro ao lançar (alguns registros podem ter sido salvos — recarregue para conferir)')
+    } finally { setRetroSaving(false) }
+  }
+
+  const retroTotalRegistros = (retroRows || []).reduce((s, r) => s + (r.include && kgNum(r.kg) > 0 ? r.dias.length : 0), 0)
+  const retroTotalKg = (retroRows || []).reduce((s, r) => s + (r.include && kgNum(r.kg) > 0 ? r.dias.length * kgNum(r.kg) : 0), 0)
+
   // ===== ABA HISTÓRICO =====
   const [alims, setAlims] = useState([])
   const [totalAlims, setTotalAlims] = useState(0)
@@ -360,6 +462,7 @@ export default function Alimentacao() {
       <div className="tabs">
         <div className={`tab ${tab === 'diaria' ? 'active' : ''}`} onClick={() => setTab('diaria')}>📅 Diária</div>
         <div className={`tab ${tab === 'historico' ? 'active' : ''}`} onClick={() => setTab('historico')}>📋 Histórico</div>
+        {canWrite() && <div className={`tab ${tab === 'retroativo' ? 'active' : ''}`} onClick={() => setTab('retroativo')}>⏪ Lançar período</div>}
       </div>
 
       {/* ===== ABA DIÁRIA ===== */}
@@ -520,6 +623,97 @@ export default function Alimentacao() {
                   ✅ Todos os lotes foram alimentados neste dia!
                 </div>
               )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ===== ABA LANÇAR PERÍODO ===== */}
+      {tab === 'retroativo' && canWrite() && (
+        <div>
+          <div className="card" style={{ marginBottom: 14 }}>
+            <div className="card-title">⏪ Lançar alimentações atrasadas</div>
+            <p style={{ fontSize: 13, color: '#6c757d', margin: '6px 0 12px' }}>
+              Escolha o período, ajuste o kg/dia de cada grupo e lance de uma vez. Dias que já têm registro não são duplicados
+              e lotes só recebem a partir da data de entrada. Os kg sugeridos usam a fase atual de cada grupo.
+            </p>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>De</label>
+                <input type="date" value={retroIni} max={retroFim || undefined} onChange={e => setRetroIni(e.target.value)} />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>Até</label>
+                <input type="date" value={retroFim} min={retroIni || undefined} max={today} onChange={e => setRetroFim(e.target.value)} />
+              </div>
+              <button className="btn btn-primary" onClick={loadRetro} disabled={retroLoading}>
+                {retroLoading ? '⏳ Carregando...' : '🔍 Carregar destinos'}
+              </button>
+            </div>
+          </div>
+
+          {retroRows && (
+            <>
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <table style={{ fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 40 }}></th>
+                      <th>Destino</th>
+                      <th style={{ textAlign: 'center' }}>Animais</th>
+                      <th style={{ textAlign: 'center' }}>Dias a lançar</th>
+                      <th>Kg/dia</th>
+                      <th>Formulação</th>
+                      <th style={{ textAlign: 'right' }}>Total (kg)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {retroRows.map(r => {
+                      const kg = kgNum(r.kg)
+                      return (
+                        <tr key={r.key} style={{ opacity: r.dias.length === 0 ? 0.5 : 1 }}>
+                          <td data-label="">
+                            <input type="checkbox" checked={r.include} disabled={r.dias.length === 0}
+                              onChange={e => setRetroRow(r.key, 'include', e.target.checked)} />
+                          </td>
+                          <td data-label="Destino">
+                            <strong>{r.d.nome}</strong>
+                            <div style={{ fontSize: 11, color: '#6c757d' }}>{r.d.fase_label || FASE_BADGE_LABEL[r.d.fase] || r.d.fase}</div>
+                          </td>
+                          <td data-label="Animais" style={{ textAlign: 'center' }}>{r.d.quantidade_animais}</td>
+                          <td data-label="Dias" style={{ textAlign: 'center' }}>
+                            {r.dias.length === 0 ? <span style={{ color: '#198754' }}>✅ em dia</span> : r.dias.length}
+                          </td>
+                          <td data-label="Kg/dia">
+                            <input type="text" inputMode="decimal" value={r.kg} disabled={r.dias.length === 0}
+                              onChange={e => setRetroRow(r.key, 'kg', e.target.value)}
+                              style={{ width: 80, padding: '4px 6px', border: '1px solid #ced4da', borderRadius: 5, textAlign: 'right' }} />
+                          </td>
+                          <td data-label="Formulação">
+                            <select value={r.formulacao_id} disabled={r.dias.length === 0}
+                              onChange={e => setRetroRow(r.key, 'formulacao_id', e.target.value)}
+                              style={{ width: '100%', padding: '4px 6px', border: '1px solid #ced4da', borderRadius: 5, fontSize: 12 }}>
+                              <option value="">— Sem formulação —</option>
+                              {retroForms.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                            </select>
+                          </td>
+                          <td data-label="Total" style={{ textAlign: 'right' }}>
+                            {r.include && kg > 0 ? (r.dias.length * kg).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '-'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                <span style={{ fontSize: 13, color: '#6c757d' }}>
+                  {retroTotalRegistros} registro(s) · {retroTotalKg.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg no total
+                </span>
+                <button className="btn btn-primary" onClick={lancarRetro} disabled={retroSaving || retroTotalRegistros === 0}>
+                  {retroSaving ? '⏳ Lançando...' : '✅ Lançar alimentações'}
+                </button>
+              </div>
             </>
           )}
         </div>
