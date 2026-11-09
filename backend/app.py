@@ -1556,35 +1556,46 @@ def get_gestantes_ativas():
 @app.route('/api/reproducoes/ratear-gestacao', methods=['POST'])
 @jwt_required()
 def ratear_gestacao_retroativa():
-    """Credita o custo de ração de dias atrasados (lançamento retroativo do grupo de matrizes
-    gestantes) em cada matriz que estava gestante naquelas datas, e recalcula o custo por leitão."""
+    """Credita o custo de ração de dias atrasados (lançamento retroativo dos grupos de matrizes
+    gestantes) em cada matriz que estava naquele grupo em cada data, e recalcula o custo por leitão.
+    Usa o mesmo critério de /api/alimentacao/retroativa; kg_animal (opcional) substitui o kg da tabela."""
     u = get_current_user()
     if not can_write(u.role):
         return jsonify({'error': 'Permissão negada'}), 403
     data = request.get_json() or {}
+    grupo = data.get('grupo')
+    if grupo not in ('matrizes_gestacao', 'matrizes_pre_parto'):
+        return jsonify({'error': 'Grupo inválido'}), 400
     try:
         datas = sorted({datetime.strptime(d, '%Y-%m-%d').date() for d in data.get('datas', [])})
     except ValueError:
         return jsonify({'error': 'Datas inválidas'}), 400
-    kg_matriz = to_float(data.get('kg_por_matriz_dia'))
+    kg_override = to_float(data.get('kg_animal'))
     custo = to_float(data.get('custo_unitario'), 0)
-    if not datas or not kg_matriz or kg_matriz <= 0:
-        return jsonify({'error': 'Informe datas e kg por matriz/dia'}), 400
+    if not datas:
+        return jsonify({'error': 'Informe as datas'}), 400
     if not custo or custo <= 0:
         return jsonify({'matrizes_atualizadas': 0, 'aviso': 'Sem custo/kg (escolha uma formulação) — nada a ratear'})
 
-    atualizadas = 0
-    reps = Reproducao.query.filter(Reproducao.data_cobertura.isnot(None), Reproducao.data_cobertura <= datas[-1]).all()
-    for rep in reps:
-        if not rep.data_parto_real and rep.status != 'gestacao':
-            continue
-        dias = sum(1 for d in datas if rep.data_cobertura <= d and (not rep.data_parto_real or d < rep.data_parto_real))
-        if dias:
-            rep.custo_racao_gestacao = round((rep.custo_racao_gestacao or 0) + dias * kg_matriz * custo, 2)
-            rep.recalcular_custo_por_nascido()
-            atualizadas += 1
+    brincos = [m.brinco for m in Plantel.query.filter_by(tipo='matriz', status='ativo').all()]
+    ciclos_map = {}
+    if brincos:
+        for r in Reproducao.query.filter(Reproducao.femea_brinco.in_(brincos)) \
+                .order_by(Reproducao.data_cobertura.asc()).all():
+            ciclos_map.setdefault(r.femea_brinco, []).append(r)
+
+    credito = {}  # id do ciclo -> (ciclo, custo a somar)
+    for ciclos in ciclos_map.values():
+        for d in datas:
+            g, kg, ciclo = _estado_matriz(ciclos, d)
+            if g == grupo and ciclo is not None:
+                _, acc = credito.get(ciclo.id, (ciclo, 0.0))
+                credito[ciclo.id] = (ciclo, acc + (kg_override or kg) * custo)
+    for ciclo, valor in credito.values():
+        ciclo.custo_racao_gestacao = round((ciclo.custo_racao_gestacao or 0) + valor, 2)
+        ciclo.recalcular_custo_por_nascido()
     db.session.commit()
-    return jsonify({'matrizes_atualizadas': atualizadas})
+    return jsonify({'matrizes_atualizadas': len(credito)})
 
 
 @app.route('/api/relatorios/reproducao', methods=['GET'])
@@ -1747,6 +1758,161 @@ FASE_PLANTEL_LABEL = {
 }
 
 
+# ---- Lançamento retroativo: fases por idade (tabela da granja) ----
+# (dia de vida inicial, chave, rótulo, kg/animal/dia, fases de formulação candidatas)
+RETRO_FASES_LEITAO = [
+    (8,   'pre_400',     'Pré 400',     0.09, ['pre_400', 'creche_pre_inicial', 'creche']),
+    (36,  'inicial',     'Inicial',     0.95, ['inicial', 'creche_inicial', 'creche']),
+    (70,  'crescimento', 'Crescimento', 2.1,  ['crescimento', 'crescimento_leve']),
+    (120, 'terminacao',  'Terminação',  3.1,  ['terminacao', 'terminacao_pesada']),
+]
+RETRO_FORMULACAO_MATRIZ = {
+    'matrizes_gestacao':  ['gestacao', 'matrizes_gestacao', 'matrizes'],
+    'matrizes_pre_parto': ['matrizes_pre_parto', 'gestacao', 'matrizes_gestacao'],
+    'matrizes_lactacao':  ['lactacao', 'matrizes_lactacao'],
+    'matrizes_vazia':     ['matrizes_vazia', 'gestacao', 'matrizes_gestacao'],
+    'reprodutores':       ['reprodutores'],
+}
+
+
+def _fase_leitao(dia_vida):
+    atual = None
+    for ini, chave, rotulo, kg, cands in RETRO_FASES_LEITAO:
+        if dia_vida >= ini:
+            atual = (chave, rotulo, kg, cands)
+    return atual
+
+
+def _estado_gestacao(dias_prenhez):
+    """Gestação: 2,2 kg/dia, sobe para 2,8 kg aos 90 dias; últimos ~10 dias = pré-parto."""
+    if dias_prenhez >= 104:
+        return 'matrizes_pre_parto', 2.8
+    return 'matrizes_gestacao', (2.8 if dias_prenhez >= 90 else 2.2)
+
+
+def _estado_matriz(ciclos, dia):
+    """Situação de uma matriz em uma data: (grupo, kg do dia, ciclo de reprodução responsável).
+    Lactação 7,5 kg até o desmame (28 dias); até os 35 dias volta à ração de gestação (2,3 kg)."""
+    for c in ciclos:
+        if c.data_parto_real:
+            if c.data_cobertura and c.data_cobertura <= dia < c.data_parto_real:
+                g, kg = _estado_gestacao((dia - c.data_cobertura).days)
+                return g, kg, c
+            dl = (dia - c.data_parto_real).days
+            if 0 <= dl < 35:
+                return 'matrizes_lactacao', (7.5 if dl < 28 else 2.3), c
+        elif c.status == 'gestacao' and c.data_cobertura and dia >= c.data_cobertura:
+            g, kg = _estado_gestacao((dia - c.data_cobertura).days)
+            return g, kg, c
+    return 'matrizes_vazia', KG_POR_ANIMAL_DIA.get('matrizes_vazia', 2.0), None
+
+
+@app.route('/api/alimentacao/retroativa', methods=['GET'])
+@jwt_required()
+def alimentacao_retroativa():
+    """Monta, dia a dia, o que deveria ter sido lançado no período (sem repetir dias já registrados)."""
+    hoje = date.today()
+    try:
+        ini = datetime.strptime(request.args.get('inicio', ''), '%Y-%m-%d').date()
+        fim = datetime.strptime(request.args.get('fim', ''), '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Informe inicio e fim no formato AAAA-MM-DD'}), 400
+    fim = min(fim, hoje)
+    if ini > fim:
+        return jsonify({'error': 'Período inválido'}), 400
+    if (fim - ini).days > 400:
+        return jsonify({'error': 'Período máximo de 400 dias por vez'}), 400
+    dias_periodo = [ini + timedelta(days=i) for i in range((fim - ini).days + 1)]
+
+    feitos = set(db.session.query(Alimentacao.lote_id, Alimentacao.plantel_grupo, Alimentacao.data)
+                 .filter(Alimentacao.data >= ini, Alimentacao.data <= fim).distinct().all())
+    formulacoes = Formulacao.query.filter_by(ativa=True).all()
+
+    def sugerir(cands):
+        for c in cands:
+            f = next((f for f in formulacoes if f.fase == c), None)
+            if f:
+                return f
+        return None
+
+    segmentos = {}
+
+    def add(key, ordem, tipo, ident, nome, rotulo, cands, dia, animais, kg):
+        seg = segmentos.setdefault(key, {
+            'key': key, 'ordem': ordem, 'tipo': tipo, 'id': ident, 'nome': nome,
+            'fase_label': rotulo, 'cands': cands, 'dias': [],
+        })
+        seg['dias'].append({'data': dia.isoformat(), 'animais': animais, 'kg': round(kg, 2)})
+
+    # Lotes: fase pela idade (dias desde o parto vinculado; sem parto, desde a entrada)
+    nasc = dict(db.session.query(Reproducao.lote_id, func.min(Reproducao.data_parto_real))
+                .filter(Reproducao.lote_id.isnot(None), Reproducao.data_parto_real.isnot(None))
+                .group_by(Reproducao.lote_id).all())
+    for lote in Lote.query.filter_by(status='ativo').order_by(Lote.numero).all():
+        qtd = lote.quantidade_atual or 0
+        if not qtd:
+            continue
+        origem = nasc.get(lote.id) or lote.data_entrada
+        for d in dias_periodo:
+            if (lote.data_entrada and d < lote.data_entrada) or (lote.id, None, d) in feitos:
+                continue
+            fase = _fase_leitao((d - origem).days)
+            if not fase:
+                continue
+            chave, rotulo, kg_animal, cands = fase
+            add(f'lote-{lote.id}-{chave}', (0, lote.numero, kg_animal), 'lote', lote.id, lote.numero,
+                rotulo, cands, d, qtd, qtd * kg_animal)
+
+    # Matrizes: situação em cada data pelos ciclos de Reprodução
+    matrizes = Plantel.query.filter_by(tipo='matriz', status='ativo').all()
+    ciclos_map = {}
+    if matrizes:
+        for r in Reproducao.query.filter(Reproducao.femea_brinco.in_([m.brinco for m in matrizes])) \
+                .order_by(Reproducao.data_cobertura.asc()).all():
+            ciclos_map.setdefault(r.femea_brinco, []).append(r)
+    ordem_grupos = ['matrizes_lactacao', 'matrizes_pre_parto', 'matrizes_gestacao', 'matrizes_vazia']
+    for d in dias_periodo:
+        por_grupo = {}
+        for m in matrizes:
+            g, kg, _ = _estado_matriz(ciclos_map.get(m.brinco, []), d)
+            acc = por_grupo.setdefault(g, [0, 0.0])
+            acc[0] += 1
+            acc[1] += kg
+        for g, (n, kg) in por_grupo.items():
+            if (None, g, d) in feitos:
+                continue
+            add(f'plantel-{g}', (1, ordem_grupos.index(g), 0), 'plantel', g, FASE_PLANTEL_LABEL.get(g, g),
+                'matrizes', RETRO_FORMULACAO_MATRIZ[g], d, n, kg)
+
+    # Reprodutores
+    n_rep = Plantel.query.filter_by(tipo='reprodutor', status='ativo').count()
+    if n_rep:
+        for d in dias_periodo:
+            if (None, 'reprodutores', d) not in feitos:
+                add('plantel-reprodutores', (2, 0, 0), 'plantel', 'reprodutores', '🐗 Reprodutores',
+                    'reprodutores', RETRO_FORMULACAO_MATRIZ['reprodutores'], d, n_rep,
+                    n_rep * KG_POR_ANIMAL_DIA.get('reprodutores', 3.0))
+
+    saida = []
+    for seg in sorted(segmentos.values(), key=lambda x: x['ordem']):
+        animais_dia = sum(x['animais'] for x in seg['dias'])
+        kg_total = sum(x['kg'] for x in seg['dias'])
+        f = sugerir(seg.pop('cands'))
+        seg.pop('ordem')
+        seg.update({
+            'animais_medio': round(animais_dia / len(seg['dias'])),
+            'kg_animal_padrao': round(kg_total / animais_dia, 3) if animais_dia else 0,
+            'formulacao_sugerida_id': f.id if f else None,
+        })
+        saida.append(seg)
+
+    return jsonify({
+        'inicio': ini.isoformat(), 'fim': fim.isoformat(),
+        'formulacoes': [{'id': f.id, 'nome': f.nome, 'fase': f.fase, 'custo_por_kg': f.calcular_custo_por_kg()} for f in formulacoes],
+        'segmentos': saida,
+    })
+
+
 @app.route('/api/alimentacao/diaria', methods=['GET'])
 @jwt_required()
 def get_alimentacao_diaria():
@@ -1832,7 +1998,6 @@ def get_alimentacao_diaria():
             'fase': subfase_key,
             'fase_label': subfase_label,
             'peso_medio': peso_medio,
-            'data_entrada': lote.data_entrada.isoformat() if lote.data_entrada else None,
             'quantidade_animais': qtd,
             'kg_sugerido': kg_sugerido,
             'kg_dia_referencia': kg_dia,
@@ -1922,20 +2087,6 @@ def get_alimentacao_diaria():
         'alimentados': sum(1 for d in destinos if d['alimentado_hoje']),
         'pendentes': sum(1 for d in destinos if not d['alimentado_hoje']),
     })
-
-
-@app.route('/api/alimentacao/registradas', methods=['GET'])
-@jwt_required()
-def alimentacoes_registradas():
-    """Pares (destino, data) já lançados no período — usado no lançamento retroativo para não duplicar."""
-    try:
-        ini = datetime.strptime(request.args.get('inicio', ''), '%Y-%m-%d').date()
-        fim = datetime.strptime(request.args.get('fim', ''), '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({'error': 'Informe inicio e fim no formato AAAA-MM-DD'}), 400
-    rows = db.session.query(Alimentacao.lote_id, Alimentacao.plantel_grupo, Alimentacao.data) \
-        .filter(Alimentacao.data >= ini, Alimentacao.data <= fim).distinct().all()
-    return jsonify([{'lote_id': l, 'plantel_grupo': g, 'data': d.isoformat()} for l, g, d in rows])
 
 
 @app.route('/api/alimentacao/bulk', methods=['POST'])
